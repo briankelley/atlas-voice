@@ -67,6 +67,20 @@ The training script runs three phases:
 2. **Augment clips** - Add noise, reverb, pitch shifts (runs on CPU)
 3. **Train model** - Train neural network (uses GPU)
 
+## Roadmap / Future Ideas
+
+This is just the foundation. Potential directions:
+
+- **Multiple wake words** - Different phrases trigger different actions
+- **Voice commands** - "Hey Atlas, run tests" → executes scripts
+- **Context-aware responses** - Behavior changes based on active window/app
+- **Local voice assistant** - Privacy-respecting alternative to cloud assistants
+- **Continuous listening modes** - Transcribe meetings, lectures, conversations
+- **Custom vocabulary** - Domain-specific word replacements and corrections
+- **Integration hooks** - Connect to home automation, IDE commands, system controls
+
+Contributions and ideas welcome.
+
 ## License
 
 - Training script and configs: Apache 2.0
