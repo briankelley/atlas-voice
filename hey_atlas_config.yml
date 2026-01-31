@@ -1,0 +1,69 @@
+## Configuration for training "Hey Atlas" wake word model
+
+# Model name
+model_name: "hey_atlas"
+
+# Target phrase - what we want to detect
+target_phrase:
+  - "hey atlas"
+
+# Phrases to NOT activate on (reduces false positives)
+custom_negative_phrases:
+  - "hey alice"
+  - "hey alex"
+  - "hey alexa"
+  - "pay atlas"
+  - "say atlas"
+
+# Number of synthetic samples to generate
+n_samples: 50000
+n_samples_val: 5000
+
+# TTS batch size
+tts_batch_size: 50
+
+# Augmentation settings
+augmentation_batch_size: 16
+augmentation_rounds: 2
+
+# Paths (relative to training directory)
+piper_sample_generator_path: "./piper-sample-generator"
+output_dir: "./hey_atlas_model"
+
+# Room impulse responses
+rir_paths:
+  - "./mit_rirs"
+
+# Background audio (MUSAN music from OpenSLR)
+background_paths:
+  - "./musan_music"
+
+background_paths_duplication_rate:
+  - 1
+
+# Validation data
+false_positive_validation_data_path: "./validation_set_features.npy"
+
+# Pre-computed negative features
+feature_data_files:
+  "ACAV100M_sample": "./openwakeword_features_ACAV100M_2000_hrs_16bit.npy"
+
+# Batch composition
+batch_n_per_class:
+  "ACAV100M_sample": 1024
+  "adversarial_negative": 100
+  "positive": 100
+
+# Model architecture
+model_type: "dnn"
+layer_size: 32
+
+# Training parameters
+steps: 100000
+max_negative_weight: 1500
+target_false_positives_per_hour: 0.1
+target_accuracy: 0.7
+target_recall: 0.5
+
+# Learning rate
+lr: 0.0001

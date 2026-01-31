@@ -1,0 +1,23 @@
+# Virtual environment
+venv/
+
+# Downloaded repositories
+openWakeWord/
+piper-sample-generator/
+
+# Training data (large files - download via script)
+*.npy
+mit_rirs/
+musan_music/
+
+# Generated model output
+*_model/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
