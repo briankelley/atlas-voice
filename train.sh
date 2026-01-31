@@ -19,6 +19,7 @@ cd "$(dirname "$0")"
 # =============================================================================
 LOG_ENABLED=true                    # Set to false to disable logging
 LOG_FILE="train_$(date +%Y%m%d_%H%M%S).log"
+START_TIME=$(date +%s)              # Track total runtime
 
 # Set up logging - tee to both console and file
 if [ "$LOG_ENABLED" = true ]; then
@@ -44,8 +45,44 @@ MODEL_NAME=$(grep "model_name:" "$CONFIG" | awk '{print $2}' | tr -d '"')
 
 echo "=============================================="
 echo "OpenWakeWord Custom Model Training"
+echo "=============================================="
+echo "Started: $(date)"
 echo "Config: $CONFIG"
 echo "Model: $MODEL_NAME"
+echo "Tarball mode: $USE_TARBALL"
+echo "Working dir: $(pwd)"
+echo ""
+
+# System info dump
+echo "[System Info]"
+echo "  Hostname: $(hostname)"
+echo "  OS: $(cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')"
+echo "  Kernel: $(uname -r)"
+echo "  User: $(whoami)"
+echo "  Shell: $SHELL"
+echo ""
+
+# GPU info
+echo "[GPU Info]"
+if command -v nvidia-smi &> /dev/null; then
+    nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>/dev/null || echo "  nvidia-smi failed"
+    echo "  CUDA (nvidia-smi): $(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1)"
+else
+    echo "  nvidia-smi not found - no NVIDIA GPU?"
+fi
+if command -v nvcc &> /dev/null; then
+    echo "  CUDA (nvcc): $(nvcc --version 2>/dev/null | grep release | awk '{print $6}' | tr -d ',')"
+else
+    echo "  nvcc not found - CUDA toolkit not installed?"
+fi
+echo ""
+
+# Disk space check
+echo "[Disk Space]"
+echo "  Available: $(df -h . | tail -1 | awk '{print $4}')"
+echo "  Required: ~25GB for training data"
+echo ""
+
 echo "=============================================="
 echo ""
 
@@ -156,19 +193,33 @@ if [ ! -f "piper-sample-generator/models/en-us-libritts-high.pt" ]; then
 fi
 
 echo "  Installing PyTorch stack (pinned versions)..."
+echo "    torch==1.13.1 torchaudio==0.13.1"
 $PIP install torch==1.13.1 torchaudio==0.13.1
+echo "  Verifying PyTorch..."
+$PYTHON -c "import torch; print(f'    torch {torch.__version__} - CUDA available: {torch.cuda.is_available()}')"
 
 echo "  Installing TensorFlow stack (pinned versions)..."
+echo "    tensorflow-cpu==2.8.1 protobuf==3.20.3"
 $PIP install protobuf==3.20.3 tensorflow-cpu==2.8.1 tensorflow_probability==0.16.0 onnx==1.14.0 onnx_tf==1.10.0
+echo "  Verifying TensorFlow..."
+$PYTHON -c "import tensorflow as tf; print(f'    tensorflow {tf.__version__}')" 2>/dev/null || echo "    TensorFlow import warning (may be OK)"
 
 echo "  Installing audio processing packages..."
 $PIP install piper-phonemize piper-tts espeak-phonemizer webrtcvad mutagen torchinfo==1.8.0 torchmetrics==0.11.4 \
     speechbrain==0.5.14 audiomentations==0.30.0 torch-audiomentations==0.11.0 \
     acoustics==0.2.6 pronouncing datasets==2.14.4 deep-phonemizer==0.0.19 \
     soundfile librosa pyyaml
+echo "  Audio packages installed."
 
 echo "  Installing openWakeWord..."
 $PIP install -e ./openWakeWord
+echo "  Verifying openWakeWord..."
+$PYTHON -c "import openwakeword; print(f'    openwakeword installed')"
+
+echo ""
+echo "  [Installed packages summary]"
+$PIP list | grep -E "torch|tensorflow|openwakeword|speechbrain|piper" || true
+echo ""
 
 echo "  [Step 1/6] DONE"
 echo ""
@@ -286,20 +337,38 @@ echo "=============================================="
 echo "  Training may take 30-60+ minutes"
 echo "=============================================="
 echo ""
+echo "  Config file contents:"
+echo "  ----------------------"
+cat "$CONFIG" | sed 's/^/    /'
+echo "  ----------------------"
+echo ""
 
 echo "  [6a] Generating synthetic speech clips..."
+echo "       Started: $(date)"
+echo "       This creates TTS samples of the wake word with variations..."
 $PYTHON openWakeWord/openwakeword/train.py --training_config "$CONFIG" --generate_clips
+echo "       Finished: $(date)"
 echo "  Synthetic clips generated."
+if [ -d "${MODEL_NAME}_model" ]; then
+    echo "  Output dir contents:"
+    ls -la "${MODEL_NAME}_model"/ 2>/dev/null | head -10 || true
+fi
 echo ""
 
 echo "  [6b] Augmenting clips with noise/reverb..."
-# Force CPU for augmentation (avoids CUDA/cuFFT version conflicts with old torch)
+echo "       Started: $(date)"
+echo "       CUDA_VISIBLE_DEVICES=\"\" (forcing CPU to avoid cuFFT conflicts)"
+echo "       This adds background noise, reverb, pitch shifts..."
 CUDA_VISIBLE_DEVICES="" $PYTHON openWakeWord/openwakeword/train.py --training_config "$CONFIG" --augment_clips
+echo "       Finished: $(date)"
 echo "  Augmentation complete."
 echo ""
 
 echo "  [6c] Training neural network (GPU accelerated)..."
+echo "       Started: $(date)"
+echo "       This trains the wake word detection model..."
 $PYTHON openWakeWord/openwakeword/train.py --training_config "$CONFIG" --train_model
+echo "       Finished: $(date)"
 echo "  Training complete."
 echo ""
 
@@ -308,21 +377,52 @@ echo ""
 
 # Report results
 MODEL_DIR="./${MODEL_NAME}_model"
+echo ""
+END_TIME=$(date +%s)
+RUNTIME=$((END_TIME - START_TIME))
+RUNTIME_MIN=$((RUNTIME / 60))
+RUNTIME_SEC=$((RUNTIME % 60))
+
+echo "=============================================="
+echo "TRAINING SUMMARY"
+echo "=============================================="
+echo "Finished: $(date)"
+echo "Total runtime: ${RUNTIME_MIN}m ${RUNTIME_SEC}s"
+echo ""
+
 if [ -f "$MODEL_DIR/${MODEL_NAME}.tflite" ]; then
-    echo "=============================================="
-    echo "Training complete!"
-    echo "=============================================="
+    echo "STATUS: SUCCESS"
     echo ""
     echo "Output files:"
-    echo "  $MODEL_DIR/${MODEL_NAME}.tflite"
-    echo "  $MODEL_DIR/${MODEL_NAME}.onnx"
+    ls -la "$MODEL_DIR/"
+    echo ""
+    echo "Model sizes:"
+    echo "  $(du -h "$MODEL_DIR/${MODEL_NAME}.tflite" 2>/dev/null || echo 'tflite not found')"
+    echo "  $(du -h "$MODEL_DIR/${MODEL_NAME}.onnx" 2>/dev/null || echo 'onnx not found')"
     echo ""
     echo "To use with OpenWakeWord:"
     echo "  mkdir -p ~/.local/share/openwakeword"
     echo "  cp $MODEL_DIR/${MODEL_NAME}.tflite ~/.local/share/openwakeword/"
     echo ""
+    echo "Log file: $LOG_FILE"
+    echo "=============================================="
 else
+    echo "STATUS: FAILED"
+    echo ""
     echo "ERROR: Model file not found at $MODEL_DIR/${MODEL_NAME}.tflite"
-    echo "Training may have failed. Check output above."
+    echo ""
+    echo "Debugging info:"
+    echo "  Check log file: $LOG_FILE"
+    echo "  Look for errors above"
+    echo "  Common issues:"
+    echo "    - CUDA version mismatch"
+    echo "    - Out of memory (GPU or system)"
+    echo "    - Python version incompatibility"
+    echo "    - Missing system packages"
+    echo ""
+    echo "Model directory contents (if any):"
+    ls -la "$MODEL_DIR/" 2>/dev/null || echo "  (directory not found)"
+    echo ""
+    echo "=============================================="
     exit 1
 fi
