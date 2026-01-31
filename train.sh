@@ -36,6 +36,56 @@ echo "Model: $MODEL_NAME"
 echo "=============================================="
 echo ""
 
+# Prerequisites: Check and install system dependencies
+echo "[Prerequisites] Checking system dependencies..."
+MISSING_PKGS=""
+
+if ! command -v espeak-ng &> /dev/null; then
+    MISSING_PKGS="$MISSING_PKGS espeak-ng"
+fi
+
+if ! command -v ffmpeg &> /dev/null; then
+    MISSING_PKGS="$MISSING_PKGS ffmpeg"
+fi
+
+# Check Python version
+PY_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+echo "  Python version: $PY_VERSION"
+if [[ "$PY_VERSION" != "3.10" && "$PY_VERSION" != "3.11" ]]; then
+    echo ""
+    echo "  WARNING: This script was tested with Python 3.10/3.11."
+    echo "           You have Python $PY_VERSION - pinned packages may fail."
+    echo "           If training fails, try: sudo apt install python3.10 python3.10-venv"
+    echo "           Then run: python3.10 -m venv venv"
+    echo ""
+    sleep 3
+fi
+
+if [ -n "$MISSING_PKGS" ]; then
+    echo "  Missing packages:$MISSING_PKGS"
+    echo "  Attempting to install..."
+
+    if command -v apt-get &> /dev/null; then
+        sudo apt-get update -qq
+        sudo apt-get install -y $MISSING_PKGS
+    elif command -v dnf &> /dev/null; then
+        sudo dnf install -y $MISSING_PKGS
+    elif command -v pacman &> /dev/null; then
+        sudo pacman -S --noconfirm $MISSING_PKGS
+    else
+        echo ""
+        echo "ERROR: Could not auto-install packages. Please install manually:"
+        echo "  $MISSING_PKGS"
+        echo ""
+        exit 1
+    fi
+
+    echo "  System packages installed."
+else
+    echo "  All system dependencies present."
+fi
+echo ""
+
 # Step 0: Create/activate virtual environment
 echo "[Step 0/6] Setting up virtual environment..."
 if [ ! -d "venv" ]; then
