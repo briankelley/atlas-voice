@@ -14,6 +14,19 @@
 set -e
 cd "$(dirname "$0")"
 
+# =============================================================================
+# Configuration
+# =============================================================================
+LOG_ENABLED=true                    # Set to false to disable logging
+LOG_FILE="train_$(date +%Y%m%d_%H%M%S).log"
+
+# Set up logging - tee to both console and file
+if [ "$LOG_ENABLED" = true ]; then
+    exec > >(tee -a "$LOG_FILE") 2>&1
+    echo "Logging to: $LOG_FILE"
+    echo ""
+fi
+
 # HuggingFace dataset for training resources
 HF_DATASET="brianckelley/atlas-voice-training-data"
 HF_BASE="https://huggingface.co/datasets/${HF_DATASET}/resolve/main"
