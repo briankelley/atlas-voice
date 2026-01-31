@@ -2,13 +2,31 @@
 # Train custom wake word model for OpenWakeWord
 # https://github.com/dscripka/openWakeWord
 #
-# Usage: ./train.sh [config.yml]
+# Usage: ./train.sh [config.yml] [--tarball]
 # Default config: hey_atlas_config.yml
+#
+# Options:
+#   --tarball    Download all training data as single archive (~20GB)
+#                instead of individual files. Faster if you have good bandwidth.
+#
+# Training data hosted at: https://huggingface.co/datasets/brianckelley/atlas-voice-training-data
 
 set -e
 cd "$(dirname "$0")"
 
-CONFIG="${1:-hey_atlas_config.yml}"
+# HuggingFace dataset for training resources
+HF_DATASET="brianckelley/atlas-voice-training-data"
+HF_BASE="https://huggingface.co/datasets/${HF_DATASET}/resolve/main"
+
+# Parse arguments
+USE_TARBALL=false
+CONFIG="hey_atlas_config.yml"
+for arg in "$@"; do
+    case $arg in
+        --tarball) USE_TARBALL=true ;;
+        *.yml|*.yaml) CONFIG="$arg" ;;
+    esac
+done
 MODEL_NAME=$(grep "model_name:" "$CONFIG" | awk '{print $2}' | tr -d '"')
 
 echo "=============================================="
@@ -35,6 +53,22 @@ $PIP install "numpy<2.0" scipy tqdm
 echo "  [Step 0/6] DONE"
 echo ""
 
+# Tarball option: download everything in one archive
+if [ "$USE_TARBALL" = true ]; then
+    echo "[Tarball Mode] Downloading all training data as single archive..."
+    if [ ! -f "atlas-voice-training-data.tar.gz" ]; then
+        echo "  Downloading tarball (~20GB)..."
+        wget --show-progress -O atlas-voice-training-data.tar.gz \
+            "${HF_BASE}/archive/atlas-voice-training-data.tar.gz"
+    fi
+
+    echo "  Extracting tarball..."
+    tar -xzf atlas-voice-training-data.tar.gz
+
+    echo "  Tarball extracted. Continuing with dependency installation..."
+    echo ""
+fi
+
 # Step 1: Install dependencies
 echo "[Step 1/6] Installing dependencies..."
 
@@ -53,8 +87,9 @@ fi
 # Download TTS model if needed
 if [ ! -f "piper-sample-generator/models/en-us-libritts-high.pt" ]; then
     echo "  Downloading TTS model (~200MB)..."
+    mkdir -p piper-sample-generator/models
     wget --show-progress -O piper-sample-generator/models/en-us-libritts-high.pt \
-        'https://github.com/rhasspy/piper-sample-generator/releases/download/v2.0.0/en_US-libritts_r-medium.pt'
+        "${HF_BASE}/piper_tts_model/en-us-libritts-high.pt"
 fi
 
 echo "  Installing PyTorch stack (pinned versions)..."
@@ -106,40 +141,30 @@ fi
 echo "  [Step 2/6] DONE"
 echo ""
 
-# Step 3: Download background audio (MUSAN music from OpenSLR)
+# Step 3: Download background audio (MUSAN music - pre-processed 16kHz)
 echo "[Step 3/6] Downloading background audio..."
 if [ ! -d "musan_music" ] || [ -z "$(ls -A musan_music 2>/dev/null)" ]; then
     rm -rf musan_music
-    echo "  Downloading MUSAN music dataset (~1GB)..."
-    wget --show-progress -O musan_music.tar.gz \
-        "https://www.openslr.org/resources/17/musan.tar.gz"
+    echo "  Downloading MUSAN music (pre-processed 16kHz, ~4.6GB)..."
 
-    echo "  Extracting music portion..."
-    tar -xzf musan_music.tar.gz musan/music --strip-components=1
-    mv music musan_music
-    rm -rf musan musan_music.tar.gz
-
-    echo "  Converting to 16kHz WAV..."
-    $PYTHON << 'EOF'
-import os
-import subprocess
-from tqdm import tqdm
-from pathlib import Path
-
-input_dir = Path("./musan_music")
-wav_files = list(input_dir.rglob("*.wav"))
-print(f"  Found {len(wav_files)} music files")
-
-for wav_file in tqdm(wav_files, desc="  Resampling"):
-    tmp = str(wav_file) + ".tmp.wav"
-    subprocess.run([
-        "ffmpeg", "-y", "-i", str(wav_file),
-        "-ar", "16000", "-ac", "1", tmp
-    ], capture_output=True)
-    os.replace(tmp, str(wav_file))
-
-print(f"  Converted {len(wav_files)} files to 16kHz mono")
-EOF
+    # Download each subdirectory from HuggingFace
+    mkdir -p musan_music
+    for subdir in fma fma-western-art hd-classical jamendo rfm; do
+        echo "    Downloading musan_music/${subdir}..."
+        huggingface-cli download "$HF_DATASET" --repo-type dataset \
+            --include "musan_music/${subdir}/*" \
+            --local-dir . --local-dir-use-symlinks False 2>/dev/null || {
+            # Fallback: download files individually if huggingface-cli fails
+            echo "    Falling back to wget..."
+            mkdir -p "musan_music/${subdir}"
+            # Get file list from HF API and download
+            curl -s "https://huggingface.co/api/datasets/${HF_DATASET}/tree/main/musan_music/${subdir}" | \
+                grep -oP '"path":"musan_music/[^"]+\.wav"' | cut -d'"' -f4 | while read f; do
+                    wget -q --show-progress -P "musan_music/${subdir}" "${HF_BASE}/${f}"
+                done
+        }
+    done
+    echo "  MUSAN music downloaded (already 16kHz, no conversion needed)."
 else
     echo "  MUSAN music already downloaded."
 fi
@@ -152,15 +177,15 @@ if [ ! -f "openwakeword_features_ACAV100M_2000_hrs_16bit.npy" ]; then
     echo "  Downloading ACAV100M features (~17GB)..."
     echo "  This is the largest download - please be patient..."
     wget --show-progress \
-        "https://huggingface.co/datasets/davidscripka/openwakeword_features/resolve/main/openwakeword_features_ACAV100M_2000_hrs_16bit.npy"
+        "${HF_BASE}/openwakeword_features_ACAV100M_2000_hrs_16bit.npy"
 else
     echo "  ACAV100M features already downloaded."
 fi
 
 if [ ! -f "validation_set_features.npy" ]; then
-    echo "  Downloading validation features..."
+    echo "  Downloading validation features (~177MB)..."
     wget --show-progress \
-        "https://huggingface.co/datasets/davidscripka/openwakeword_features/resolve/main/validation_set_features.npy"
+        "${HF_BASE}/validation_set_features.npy"
 else
     echo "  Validation features already downloaded."
 fi
