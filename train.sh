@@ -98,6 +98,12 @@ if ! command -v ffmpeg &> /dev/null; then
     MISSING_PKGS="$MISSING_PKGS ffmpeg"
 fi
 
+# Check if python3-venv is available (ensurepip needed for venv creation)
+if ! python3 -c "import ensurepip" 2>/dev/null; then
+    echo "  python3 venv module not available"
+    MISSING_PKGS="$MISSING_PKGS python3-venv"
+fi
+
 # Check Python version
 PY_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 echo "  Python version: $PY_VERSION"
@@ -117,6 +123,10 @@ if [ -n "$MISSING_PKGS" ]; then
 
     if command -v apt-get &> /dev/null; then
         sudo apt-get update -qq
+        # Also try version-specific venv package for non-standard Python versions
+        if echo "$MISSING_PKGS" | grep -q "python3-venv"; then
+            MISSING_PKGS="$MISSING_PKGS python${PY_VERSION}-venv"
+        fi
         sudo apt-get install -y $MISSING_PKGS
     elif command -v dnf &> /dev/null; then
         sudo dnf install -y $MISSING_PKGS
