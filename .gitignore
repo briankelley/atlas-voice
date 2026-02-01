@@ -13,6 +13,9 @@ musan_music/
 # Generated model output
 *_model/
 
+# Debug/log output
+atlas-voice-debug/
+
 # Python
 __pycache__/
 *.py[cod]

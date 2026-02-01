@@ -18,10 +18,13 @@ cd "$(dirname "$0")"
 # Configuration
 # =============================================================================
 LOG_ENABLED=true                    # Set to false to disable logging
-LOG_FILE="train_$(date +%Y%m%d_%H%M%S).log"
+DEBUG_DIR="atlas-voice-debug"       # Directory for logs and debug output
 START_TIME=$(date +%s)              # Track total runtime
 
-# Set up logging - tee to both console and file
+# Set up debug directory and logging
+mkdir -p "$DEBUG_DIR"
+LOG_FILE="$DEBUG_DIR/train_$(date +%Y%m%d_%H%M%S).log"
+
 if [ "$LOG_ENABLED" = true ]; then
     exec > >(tee -a "$LOG_FILE") 2>&1
     echo "Logging to: $LOG_FILE"
