@@ -101,6 +101,11 @@ if ! command -v ffmpeg &> /dev/null; then
     MISSING_PKGS="$MISSING_PKGS ffmpeg"
 fi
 
+# Check for build tools (needed to compile webrtcvad, etc.)
+if ! command -v gcc &> /dev/null; then
+    MISSING_PKGS="$MISSING_PKGS build-essential"
+fi
+
 # Determine which Python to use
 # Priority: existing venv > python3.10 > python3.11 > python3 (with warning)
 PYTHON_CMD=""
@@ -134,6 +139,11 @@ if [ "$VENV_EXISTS" = false ]; then
             echo "  python3.10-venv not installed"
             MISSING_PKGS="$MISSING_PKGS python3.10-venv"
         fi
+        # Check if python3.10-dev is installed (needed for compiling C extensions)
+        if [ ! -f "/usr/include/python3.10/Python.h" ]; then
+            echo "  python3.10-dev not installed"
+            MISSING_PKGS="$MISSING_PKGS python3.10-dev"
+        fi
     elif command -v python3.11 &> /dev/null; then
         PYTHON_CMD="python3.11"
         echo "  Found python3.11 - will use for venv"
@@ -141,6 +151,11 @@ if [ "$VENV_EXISTS" = false ]; then
         if ! $PYTHON_CMD -c "import ensurepip" 2>/dev/null; then
             echo "  python3.11-venv not installed"
             MISSING_PKGS="$MISSING_PKGS python3.11-venv"
+        fi
+        # Check if python3.11-dev is installed (needed for compiling C extensions)
+        if [ ! -f "/usr/include/python3.11/Python.h" ]; then
+            echo "  python3.11-dev not installed"
+            MISSING_PKGS="$MISSING_PKGS python3.11-dev"
         fi
     else
         # Fall back to system python3
@@ -187,6 +202,11 @@ if [ "$VENV_EXISTS" = false ]; then
         if ! $PYTHON_CMD -c "import ensurepip" 2>/dev/null; then
             echo "  python3-venv not installed"
             MISSING_PKGS="$MISSING_PKGS python3-venv python${PY_VERSION}-venv"
+        fi
+        # Check if python3-dev is installed (needed for compiling C extensions)
+        if [ ! -f "/usr/include/python${PY_VERSION}/Python.h" ]; then
+            echo "  python${PY_VERSION}-dev not installed"
+            MISSING_PKGS="$MISSING_PKGS python${PY_VERSION}-dev"
         fi
     fi
 fi
