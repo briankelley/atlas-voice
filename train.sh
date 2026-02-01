@@ -104,42 +104,79 @@ if ! python3 -c "import ensurepip" 2>/dev/null; then
     MISSING_PKGS="$MISSING_PKGS python3-venv"
 fi
 
-# Check Python version
-PY_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-echo "  Python version: $PY_VERSION"
-if [[ "$PY_VERSION" != "3.10" && "$PY_VERSION" != "3.11" ]]; then
-    echo ""
-    echo "  =============================================="
-    echo "  PYTHON VERSION WARNING"
-    echo "  =============================================="
-    echo ""
-    echo "  You have Python $PY_VERSION, but this script was tested with Python 3.10/3.11."
-    echo ""
-    echo "  WHAT THIS MEANS:"
-    echo "    - PyTorch 1.13.1 does NOT have wheels for Python $PY_VERSION"
-    echo "    - TensorFlow 2.8.1 may also fail to install"
-    echo "    - Other pinned dependencies may be incompatible"
-    echo ""
-    echo "  LIKELY OUTCOME:"
-    echo "    The script will download several hundred MB of data, then fail"
-    echo "    when installing PyTorch. This is a waste of time and bandwidth."
-    echo ""
-    echo "  RECOMMENDED FIX:"
-    echo "    sudo apt install python3.10 python3.10-venv"
-    echo "    rm -rf venv  # remove any existing venv"
-    echo "    python3.10 -m venv venv"
-    echo "    Then re-run this script."
-    echo ""
-    echo "  =============================================="
-    echo ""
-    read -p "  Proceed anyway with Python $PY_VERSION? [y/N] " -n 1 -r
-    echo ""
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "  Exiting. Install Python 3.10 and try again."
-        exit 1
+# Determine which Python to use
+# Priority: existing venv > python3.10 > python3.11 > python3 (with warning)
+PYTHON_CMD=""
+VENV_EXISTS=false
+
+if [ -d "venv" ] && [ -f "venv/bin/python" ]; then
+    VENV_EXISTS=true
+    VENV_PY_VERSION=$(venv/bin/python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+    echo "  Existing venv detected: Python $VENV_PY_VERSION"
+    if [[ "$VENV_PY_VERSION" == "3.10" || "$VENV_PY_VERSION" == "3.11" ]]; then
+        echo "  Venv Python version is compatible. Proceeding."
+        PYTHON_CMD="python3"  # Will use venv after activation
+    else
+        echo "  WARNING: Existing venv uses Python $VENV_PY_VERSION (untested)"
+        read -p "  Delete venv and recreate with compatible Python? [Y/n] " -n 1 -r
+        echo ""
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            rm -rf venv
+            VENV_EXISTS=false
+        fi
     fi
-    echo "  Continuing with Python $PY_VERSION (you were warned)..."
-    echo ""
+fi
+
+if [ "$VENV_EXISTS" = false ]; then
+    # No venv - find best available Python
+    if command -v python3.10 &> /dev/null; then
+        PYTHON_CMD="python3.10"
+        echo "  Found python3.10 - will use for venv"
+    elif command -v python3.11 &> /dev/null; then
+        PYTHON_CMD="python3.11"
+        echo "  Found python3.11 - will use for venv"
+    else
+        # Fall back to system python3
+        PY_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        echo "  System Python: $PY_VERSION"
+
+        if [[ "$PY_VERSION" != "3.10" && "$PY_VERSION" != "3.11" ]]; then
+            echo ""
+            echo "  =============================================="
+            echo "  PYTHON VERSION WARNING"
+            echo "  =============================================="
+            echo ""
+            echo "  No compatible Python found. System has Python $PY_VERSION."
+            echo "  This script was tested with Python 3.10/3.11."
+            echo ""
+            echo "  WHAT THIS MEANS:"
+            echo "    - PyTorch 1.13.1 does NOT have wheels for Python $PY_VERSION"
+            echo "    - TensorFlow 2.8.1 may also fail to install"
+            echo "    - Other pinned dependencies may be incompatible"
+            echo ""
+            echo "  LIKELY OUTCOME:"
+            echo "    The script will download several hundred MB, then fail"
+            echo "    when installing PyTorch. Waste of time and bandwidth."
+            echo ""
+            echo "  RECOMMENDED FIX:"
+            echo "    sudo add-apt-repository ppa:deadsnakes/ppa"
+            echo "    sudo apt update"
+            echo "    sudo apt install python3.10 python3.10-venv"
+            echo "    Then re-run this script."
+            echo ""
+            echo "  =============================================="
+            echo ""
+            read -p "  Proceed anyway with Python $PY_VERSION? [y/N] " -n 1 -r
+            echo ""
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                echo "  Exiting. Install Python 3.10 and try again."
+                exit 1
+            fi
+            echo "  Continuing with Python $PY_VERSION (you were warned)..."
+            echo ""
+        fi
+        PYTHON_CMD="python3"
+    fi
 fi
 
 if [ -n "$MISSING_PKGS" ]; then
@@ -174,8 +211,8 @@ echo ""
 # Step 0: Create/activate virtual environment
 echo "[Step 0/6] Setting up virtual environment..."
 if [ ! -d "venv" ]; then
-    echo "  Creating venv..."
-    python3 -m venv venv
+    echo "  Creating venv with $PYTHON_CMD..."
+    $PYTHON_CMD -m venv venv
 fi
 source venv/bin/activate
 PYTHON="$PWD/venv/bin/python3"
