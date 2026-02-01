@@ -109,12 +109,37 @@ PY_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.versi
 echo "  Python version: $PY_VERSION"
 if [[ "$PY_VERSION" != "3.10" && "$PY_VERSION" != "3.11" ]]; then
     echo ""
-    echo "  WARNING: This script was tested with Python 3.10/3.11."
-    echo "           You have Python $PY_VERSION - pinned packages may fail."
-    echo "           If training fails, try: sudo apt install python3.10 python3.10-venv"
-    echo "           Then run: python3.10 -m venv venv"
+    echo "  =============================================="
+    echo "  PYTHON VERSION WARNING"
+    echo "  =============================================="
     echo ""
-    sleep 3
+    echo "  You have Python $PY_VERSION, but this script was tested with Python 3.10/3.11."
+    echo ""
+    echo "  WHAT THIS MEANS:"
+    echo "    - PyTorch 1.13.1 does NOT have wheels for Python $PY_VERSION"
+    echo "    - TensorFlow 2.8.1 may also fail to install"
+    echo "    - Other pinned dependencies may be incompatible"
+    echo ""
+    echo "  LIKELY OUTCOME:"
+    echo "    The script will download several hundred MB of data, then fail"
+    echo "    when installing PyTorch. This is a waste of time and bandwidth."
+    echo ""
+    echo "  RECOMMENDED FIX:"
+    echo "    sudo apt install python3.10 python3.10-venv"
+    echo "    rm -rf venv  # remove any existing venv"
+    echo "    python3.10 -m venv venv"
+    echo "    Then re-run this script."
+    echo ""
+    echo "  =============================================="
+    echo ""
+    read -p "  Proceed anyway with Python $PY_VERSION? [y/N] " -n 1 -r
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "  Exiting. Install Python 3.10 and try again."
+        exit 1
+    fi
+    echo "  Continuing with Python $PY_VERSION (you were warned)..."
+    echo ""
 fi
 
 if [ -n "$MISSING_PKGS" ]; then
@@ -168,7 +193,7 @@ if [ "$USE_TARBALL" = true ]; then
     echo "[Tarball Mode] Downloading all training data as single archive..."
     if [ ! -f "atlas-voice-training-data.tar.gz" ]; then
         echo "  Downloading tarball (~20GB)..."
-        wget --show-progress -O atlas-voice-training-data.tar.gz \
+        wget -nv -O atlas-voice-training-data.tar.gz \
             "${HF_BASE}/archive/atlas-voice-training-data.tar.gz"
     fi
 
@@ -198,7 +223,7 @@ fi
 if [ ! -f "piper-sample-generator/models/en-us-libritts-high.pt" ]; then
     echo "  Downloading TTS model (~200MB)..."
     mkdir -p piper-sample-generator/models
-    wget --show-progress -O piper-sample-generator/models/en-us-libritts-high.pt \
+    wget -nv -O piper-sample-generator/models/en-us-libritts-high.pt \
         "${HF_BASE}/piper_tts_model/en-us-libritts-high.pt"
 fi
 
@@ -284,7 +309,7 @@ if [ ! -d "musan_music" ] || [ -z "$(ls -A musan_music 2>/dev/null)" ]; then
             # Get file list from HF API and download
             curl -s "https://huggingface.co/api/datasets/${HF_DATASET}/tree/main/musan_music/${subdir}" | \
                 grep -oP '"path":"musan_music/[^"]+\.wav"' | cut -d'"' -f4 | while read f; do
-                    wget -q --show-progress -P "musan_music/${subdir}" "${HF_BASE}/${f}"
+                    wget -q -nv -P "musan_music/${subdir}" "${HF_BASE}/${f}"
                 done
         }
     done
@@ -300,7 +325,7 @@ echo "[Step 4/6] Downloading pre-computed features..."
 if [ ! -f "openwakeword_features_ACAV100M_2000_hrs_16bit.npy" ]; then
     echo "  Downloading ACAV100M features (~17GB)..."
     echo "  This is the largest download - please be patient..."
-    wget --show-progress \
+    wget -nv \
         "${HF_BASE}/openwakeword_features_ACAV100M_2000_hrs_16bit.npy"
 else
     echo "  ACAV100M features already downloaded."
@@ -308,7 +333,7 @@ fi
 
 if [ ! -f "validation_set_features.npy" ]; then
     echo "  Downloading validation features (~177MB)..."
-    wget --show-progress \
+    wget -nv \
         "${HF_BASE}/validation_set_features.npy"
 else
     echo "  Validation features already downloaded."
@@ -323,16 +348,16 @@ mkdir -p "$MODELS_DIR"
 
 if [ ! -f "$MODELS_DIR/embedding_model.onnx" ]; then
     echo "  Downloading embedding_model.onnx..."
-    wget --show-progress -O "$MODELS_DIR/embedding_model.onnx" \
+    wget -nv -O "$MODELS_DIR/embedding_model.onnx" \
         "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.onnx"
     echo "  Downloading embedding_model.tflite..."
-    wget --show-progress -O "$MODELS_DIR/embedding_model.tflite" \
+    wget -nv -O "$MODELS_DIR/embedding_model.tflite" \
         "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.tflite"
     echo "  Downloading melspectrogram.onnx..."
-    wget --show-progress -O "$MODELS_DIR/melspectrogram.onnx" \
+    wget -nv -O "$MODELS_DIR/melspectrogram.onnx" \
         "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.onnx"
     echo "  Downloading melspectrogram.tflite..."
-    wget --show-progress -O "$MODELS_DIR/melspectrogram.tflite" \
+    wget -nv -O "$MODELS_DIR/melspectrogram.tflite" \
         "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.tflite"
 else
     echo "  Embedding models already present."
