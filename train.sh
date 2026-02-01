@@ -98,12 +98,6 @@ if ! command -v ffmpeg &> /dev/null; then
     MISSING_PKGS="$MISSING_PKGS ffmpeg"
 fi
 
-# Check if python3-venv is available (ensurepip needed for venv creation)
-if ! python3 -c "import ensurepip" 2>/dev/null; then
-    echo "  python3 venv module not available"
-    MISSING_PKGS="$MISSING_PKGS python3-venv"
-fi
-
 # Determine which Python to use
 # Priority: existing venv > python3.10 > python3.11 > python3 (with warning)
 PYTHON_CMD=""
@@ -132,9 +126,19 @@ if [ "$VENV_EXISTS" = false ]; then
     if command -v python3.10 &> /dev/null; then
         PYTHON_CMD="python3.10"
         echo "  Found python3.10 - will use for venv"
+        # Check if python3.10-venv is installed
+        if ! $PYTHON_CMD -c "import ensurepip" 2>/dev/null; then
+            echo "  python3.10-venv not installed"
+            MISSING_PKGS="$MISSING_PKGS python3.10-venv"
+        fi
     elif command -v python3.11 &> /dev/null; then
         PYTHON_CMD="python3.11"
         echo "  Found python3.11 - will use for venv"
+        # Check if python3.11-venv is installed
+        if ! $PYTHON_CMD -c "import ensurepip" 2>/dev/null; then
+            echo "  python3.11-venv not installed"
+            MISSING_PKGS="$MISSING_PKGS python3.11-venv"
+        fi
     else
         # Fall back to system python3
         PY_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
@@ -176,6 +180,11 @@ if [ "$VENV_EXISTS" = false ]; then
             echo ""
         fi
         PYTHON_CMD="python3"
+        # Check if python3-venv is installed for system Python
+        if ! $PYTHON_CMD -c "import ensurepip" 2>/dev/null; then
+            echo "  python3-venv not installed"
+            MISSING_PKGS="$MISSING_PKGS python3-venv python${PY_VERSION}-venv"
+        fi
     fi
 fi
 
@@ -185,10 +194,6 @@ if [ -n "$MISSING_PKGS" ]; then
 
     if command -v apt-get &> /dev/null; then
         sudo apt-get update -qq
-        # Also try version-specific venv package for non-standard Python versions
-        if echo "$MISSING_PKGS" | grep -q "python3-venv"; then
-            MISSING_PKGS="$MISSING_PKGS python${PY_VERSION}-venv"
-        fi
         sudo apt-get install -y $MISSING_PKGS
     elif command -v dnf &> /dev/null; then
         sudo dnf install -y $MISSING_PKGS
