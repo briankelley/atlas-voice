@@ -363,26 +363,28 @@ echo ""
 echo "[Step 2/6] Downloading room impulse responses..."
 if [ ! -d "mit_rirs" ] || [ -z "$(ls -A mit_rirs 2>/dev/null)" ]; then
     rm -rf mit_rirs
+    mkdir -p mit_rirs
+    echo "  Downloading MIT RIRs from HuggingFace..."
+    # Use huggingface_hub directly instead of datasets (avoids fsspec glob issues)
     $PYTHON << 'EOF'
+from huggingface_hub import HfApi, hf_hub_download
 import os
-import numpy as np
-import scipy.io.wavfile
-from tqdm import tqdm
-import datasets
 
+api = HfApi()
+repo_id = "davidscripka/MIT_environmental_impulse_responses"
 output_dir = "./mit_rirs"
-os.makedirs(output_dir, exist_ok=True)
 
-print("  Downloading MIT RIRs from HuggingFace...")
-rir_dataset = datasets.load_dataset("davidscripka/MIT_environmental_impulse_responses", split="train", streaming=True)
+# List all files in the dataset repo
+files = api.list_repo_files(repo_id, repo_type="dataset")
+wav_files = [f for f in files if f.endswith('.wav')]
 
-count = 0
-for row in tqdm(rir_dataset, desc="  Saving RIRs"):
-    name = row['audio']['path'].split('/')[-1]
-    scipy.io.wavfile.write(os.path.join(output_dir, name), 16000, (row['audio']['array']*32767).astype(np.int16))
-    count += 1
+print(f"  Found {len(wav_files)} WAV files to download...")
+for i, f in enumerate(wav_files):
+    if (i + 1) % 50 == 0:
+        print(f"  Downloaded {i + 1}/{len(wav_files)}...")
+    local_path = hf_hub_download(repo_id=repo_id, filename=f, repo_type="dataset", local_dir=output_dir)
 
-print(f"  Saved {count} room impulse responses")
+print(f"  Saved {len(wav_files)} room impulse responses")
 EOF
 else
     echo "  MIT RIRs already downloaded."
