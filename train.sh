@@ -522,9 +522,17 @@ echo ""
 echo "  [6c] Training neural network (GPU accelerated)..."
 echo "       Started: $(date)"
 echo "       This trains the wake word detection model..."
-$PYTHON openWakeWord/openwakeword/train.py --training_config "$CONFIG" --train_model
+$PYTHON openWakeWord/openwakeword/train.py --training_config "$CONFIG" --train_model || true
 echo "       Finished: $(date)"
-echo "  Training complete."
+
+# Check if model was saved (openWakeWord sometimes segfaults during cleanup AFTER saving)
+MODEL_FILE="${MODEL_NAME}_model/${MODEL_NAME}.onnx"
+if [ -f "$MODEL_FILE" ]; then
+    echo "  Training complete. Model saved: $MODEL_FILE ($(du -h "$MODEL_FILE" | cut -f1))"
+else
+    echo "  ERROR: Training failed - model file not found: $MODEL_FILE"
+    exit 1
+fi
 echo ""
 
 echo "  [Step 6/6] DONE"
