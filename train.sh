@@ -533,6 +533,41 @@ else
     echo "  ERROR: Training failed - model file not found: $MODEL_FILE"
     exit 1
 fi
+
+# Convert ONNX to TFLite for broader compatibility
+TFLITE_FILE="${MODEL_NAME}_model/${MODEL_NAME}.tflite"
+echo "  Converting ONNX to TFLite..."
+$PYTHON << EOF
+import onnx
+from onnx_tf.backend import prepare
+import tensorflow as tf
+
+# Load ONNX model
+onnx_model = onnx.load("${MODEL_FILE}")
+
+# Convert to TensorFlow
+tf_rep = prepare(onnx_model)
+tf_rep.export_graph("${MODEL_NAME}_model/${MODEL_NAME}_tf")
+
+# Convert TensorFlow to TFLite
+converter = tf.lite.TFLiteConverter.from_saved_model("${MODEL_NAME}_model/${MODEL_NAME}_tf")
+tflite_model = converter.convert()
+
+# Save TFLite model
+with open("${TFLITE_FILE}", "wb") as f:
+    f.write(tflite_model)
+
+print(f"  TFLite model saved: ${TFLITE_FILE}")
+EOF
+
+# Clean up intermediate TF model
+rm -rf "${MODEL_NAME}_model/${MODEL_NAME}_tf"
+
+if [ -f "$TFLITE_FILE" ]; then
+    echo "  TFLite conversion complete: $TFLITE_FILE ($(du -h "$TFLITE_FILE" | cut -f1))"
+else
+    echo "  WARNING: TFLite conversion failed (ONNX model still available)"
+fi
 echo ""
 
 echo "  [Step 6/6] DONE"
