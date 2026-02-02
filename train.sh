@@ -317,6 +317,8 @@ fi
 if [ ! -d "piper-sample-generator" ]; then
     echo "  Cloning piper-sample-generator (dscripka fork)..."
     git clone https://github.com/dscripka/piper-sample-generator
+    # Patch: change debug logging to info so batch progress is visible
+    sed -i 's/_LOGGER.debug/_LOGGER.info/' piper-sample-generator/generate_samples.py
 fi
 
 # Download TTS model if needed
