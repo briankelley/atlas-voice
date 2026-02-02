@@ -386,13 +386,18 @@ for i, f in enumerate(wav_files):
 
 print(f"  Saved {len(wav_files)} room impulse responses")
 EOF
+    # Flatten directory structure - files may be in subdirectories like 16khz/
+    # Training code expects WAV files directly in mit_rirs/
+    find mit_rirs -name "*.wav" -type f -exec mv {} mit_rirs/ \; 2>/dev/null || true
+    find mit_rirs -type d -empty -delete 2>/dev/null || true
     # Clean up huggingface cache directory (training code tries to load it as audio)
     rm -rf mit_rirs/.cache
 else
     echo "  MIT RIRs already downloaded."
 fi
-# Also clean up any .cache that might exist from previous runs
+# Also clean up any .cache or subdirectories that might exist from previous runs
 rm -rf mit_rirs/.cache 2>/dev/null || true
+find mit_rirs -type d -empty -delete 2>/dev/null || true
 echo "  [Step 2/6] DONE"
 echo ""
 
@@ -431,7 +436,7 @@ echo "[Step 4/6] Downloading pre-computed features..."
 if [ ! -f "openwakeword_features_ACAV100M_2000_hrs_16bit.npy" ]; then
     echo "  Downloading ACAV100M features (~17GB)..."
     echo "  This is the largest download - please be patient..."
-    wget -nv \
+    wget --progress=bar:force:noscroll \
         "${HF_BASE}/openwakeword_features_ACAV100M_2000_hrs_16bit.npy"
 else
     echo "  ACAV100M features already downloaded."
