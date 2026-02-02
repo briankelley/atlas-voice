@@ -187,14 +187,14 @@ if [ "$VENV_EXISTS" = false ]; then
             echo ""
             echo "  =============================================="
             echo ""
-            read -p "  Install Python 3.10 automatically? [Y/n/q] " -n 1 -r
+            read -p "  Install Python 3.10 automatically? [y/N/q] " -n 1 -r
             echo ""
 
             if [[ $REPLY =~ ^[Qq]$ ]]; then
                 echo "  Exiting."
                 exit 1
-            elif [[ ! $REPLY =~ ^[Nn]$ ]]; then
-                # Auto-install python3.10
+            elif [[ $REPLY =~ ^[Yy]$ ]]; then
+                # User explicitly approved - auto-install python3.10
                 echo ""
                 echo "  Adding deadsnakes PPA..."
                 sudo add-apt-repository -y ppa:deadsnakes/ppa
