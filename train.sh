@@ -21,6 +21,15 @@ LOG_ENABLED=true                    # Set to false to disable logging
 DEBUG_DIR="atlas-voice-debug"       # Directory for logs and debug output
 START_TIME=$(date +%s)              # Track total runtime
 
+# =============================================================================
+# Training Parameters (adjust these for quality vs time tradeoff)
+# =============================================================================
+N_SAMPLES=100000                    # Synthetic training samples (default: 50000)
+N_SAMPLES_VAL=10000                 # Validation samples (default: 5000)
+AUGMENTATION_ROUNDS=2               # Augmentation passes per sample (default: 2)
+TRAINING_STEPS=150000               # Neural network training steps (default: 100000)
+# Rough time estimate: 1 hour baseline, scales ~linearly with samples/steps
+
 # Set up debug directory and logging
 mkdir -p "$DEBUG_DIR"
 LOG_FILE="$DEBUG_DIR/train_$(date +%Y%m%d_%H%M%S).log"
@@ -44,6 +53,13 @@ for arg in "$@"; do
         *.yml|*.yaml) CONFIG="$arg" ;;
     esac
 done
+
+# Update config file with training parameters from script header
+sed -i "s/^n_samples:.*/n_samples: $N_SAMPLES/" "$CONFIG"
+sed -i "s/^n_samples_val:.*/n_samples_val: $N_SAMPLES_VAL/" "$CONFIG"
+sed -i "s/^augmentation_rounds:.*/augmentation_rounds: $AUGMENTATION_ROUNDS/" "$CONFIG"
+sed -i "s/^steps:.*/steps: $TRAINING_STEPS/" "$CONFIG"
+
 MODEL_NAME=$(grep "model_name:" "$CONFIG" | awk '{print $2}' | tr -d '"')
 
 echo "=============================================="
@@ -53,6 +69,11 @@ echo "Started: $(date)"
 echo "Config: $CONFIG"
 echo "Model: $MODEL_NAME"
 echo "Tarball mode: $USE_TARBALL"
+echo ""
+echo "Training Parameters:"
+echo "  Samples: $N_SAMPLES (val: $N_SAMPLES_VAL)"
+echo "  Augmentation rounds: $AUGMENTATION_ROUNDS"
+echo "  Training steps: $TRAINING_STEPS"
 echo "Working dir: $(pwd)"
 echo ""
 
