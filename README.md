@@ -4,6 +4,20 @@ Train your own wake word for [OpenWakeWord](https://github.com/dscripka/openWake
 
 This repo provides everything needed to train a custom wake word model, packaged for reproducibility.
 
+## ⚠️ Fair Warning
+
+*This training pipeline was an absolute nightmare to get working.* The dependency stack is fragile - specific versions of PyTorch, TensorFlow, protobuf, and CUDA that all need to play nice together. The script in this repo represents hours of trial and error, failed downloads, version conflicts, and fixes for issues that weren't documented anywhere.
+
+*What's pinned in this script works.* If you start changing versions or have conflicting packages on your system, expect problems. The venv *should* isolate you, but CUDA mismatches in particular will ruin your day.
+
+If training fails:
+- **Read the error carefully** - version conflicts are usually obvious
+- **Check your CUDA version** - `nvidia-smi` and `nvcc --version` should roughly agree
+- **Try the Docker option** - it exists for a reason
+- **File an issue** - but include your OS, Python version, CUDA version, and the actual error
+
+This isn't a polished product. It's a "worked on my machine, hopefully works on yours" situation.
+
 ## Quick Start
 
 ### Option 1: Docker (Recommended)
