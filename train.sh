@@ -158,55 +158,90 @@ if [ "$VENV_EXISTS" = false ]; then
             MISSING_PKGS="$MISSING_PKGS python3.11-dev"
         fi
     else
-        # Fall back to system python3
+        # No python3.10 or python3.11 found
         PY_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-        echo "  System Python: $PY_VERSION"
+        echo "  System Python: $PY_VERSION (not compatible)"
+        echo ""
+        echo "  =============================================="
+        echo "  PYTHON VERSION ISSUE"
+        echo "  =============================================="
+        echo ""
+        echo "  This script requires Python 3.10 or 3.11."
+        echo "  Your system has Python $PY_VERSION which is NOT compatible."
+        echo ""
+        echo "  PyTorch 1.13.1 and TensorFlow 2.8.1 do not have wheels"
+        echo "  for Python $PY_VERSION. Training WILL fail."
+        echo ""
 
-        if [[ "$PY_VERSION" != "3.10" && "$PY_VERSION" != "3.11" ]]; then
+        # Check if we can offer auto-install (apt-based systems)
+        if command -v apt-get &> /dev/null && command -v add-apt-repository &> /dev/null; then
+            echo "  OPTION 1: Auto-install Python 3.10 (recommended)"
+            echo "    This will add the deadsnakes PPA and install Python 3.10"
             echo ""
-            echo "  =============================================="
-            echo "  PYTHON VERSION WARNING"
-            echo "  =============================================="
-            echo ""
-            echo "  No compatible Python found. System has Python $PY_VERSION."
-            echo "  This script was tested with Python 3.10/3.11."
-            echo ""
-            echo "  WHAT THIS MEANS:"
-            echo "    - PyTorch 1.13.1 does NOT have wheels for Python $PY_VERSION"
-            echo "    - TensorFlow 2.8.1 may also fail to install"
-            echo "    - Other pinned dependencies may be incompatible"
-            echo ""
-            echo "  LIKELY OUTCOME:"
-            echo "    The script will download several hundred MB, then fail"
-            echo "    when installing PyTorch. Waste of time and bandwidth."
-            echo ""
-            echo "  RECOMMENDED FIX:"
+            echo "  OPTION 2: Exit and install manually"
             echo "    sudo add-apt-repository ppa:deadsnakes/ppa"
             echo "    sudo apt update"
-            echo "    sudo apt install python3.10 python3.10-venv"
-            echo "    Then re-run this script."
+            echo "    sudo apt install python3.10 python3.10-venv python3.10-dev"
+            echo ""
+            echo "  OPTION 3: Proceed with Python $PY_VERSION (will likely fail)"
+            echo ""
+            echo "  =============================================="
+            echo ""
+            read -p "  Install Python 3.10 automatically? [Y/n/q] " -n 1 -r
+            echo ""
+
+            if [[ $REPLY =~ ^[Qq]$ ]]; then
+                echo "  Exiting."
+                exit 1
+            elif [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                # Auto-install python3.10
+                echo ""
+                echo "  Adding deadsnakes PPA..."
+                sudo add-apt-repository -y ppa:deadsnakes/ppa
+                echo "  Updating package lists..."
+                sudo apt-get update -qq
+                echo "  Installing Python 3.10..."
+                sudo apt-get install -y python3.10 python3.10-venv python3.10-dev
+                echo "  Python 3.10 installed."
+                echo ""
+                PYTHON_CMD="python3.10"
+                # Skip to end of this block
+            else
+                echo ""
+                read -p "  Proceed anyway with Python $PY_VERSION? [y/N] " -n 1 -r
+                echo ""
+                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                    echo "  Exiting. Install Python 3.10 and try again."
+                    exit 1
+                fi
+                echo "  Continuing with Python $PY_VERSION (you were warned)..."
+                PYTHON_CMD="python3"
+            fi
+        else
+            # Non-apt system, can't auto-install
+            echo "  Cannot auto-install on this system (no apt)."
+            echo "  Please install Python 3.10 or 3.11 manually."
             echo ""
             echo "  =============================================="
             echo ""
             read -p "  Proceed anyway with Python $PY_VERSION? [y/N] " -n 1 -r
             echo ""
             if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                echo "  Exiting. Install Python 3.10 and try again."
+                echo "  Exiting."
                 exit 1
             fi
             echo "  Continuing with Python $PY_VERSION (you were warned)..."
-            echo ""
+            PYTHON_CMD="python3"
         fi
-        PYTHON_CMD="python3"
-        # Check if python3-venv is installed for system Python
-        if ! $PYTHON_CMD -c "import ensurepip" 2>/dev/null; then
-            echo "  python3-venv not installed"
-            MISSING_PKGS="$MISSING_PKGS python3-venv python${PY_VERSION}-venv"
-        fi
-        # Check if python3-dev is installed (needed for compiling C extensions)
-        if [ ! -f "/usr/include/python${PY_VERSION}/Python.h" ]; then
-            echo "  python${PY_VERSION}-dev not installed"
-            MISSING_PKGS="$MISSING_PKGS python${PY_VERSION}-dev"
+
+        # Check venv/dev for whatever Python we ended up with
+        if [ "$PYTHON_CMD" = "python3" ]; then
+            if ! $PYTHON_CMD -c "import ensurepip" 2>/dev/null; then
+                MISSING_PKGS="$MISSING_PKGS python3-venv python${PY_VERSION}-venv"
+            fi
+            if [ ! -f "/usr/include/python${PY_VERSION}/Python.h" ]; then
+                MISSING_PKGS="$MISSING_PKGS python${PY_VERSION}-dev"
+            fi
         fi
     fi
 fi
@@ -307,7 +342,7 @@ $PYTHON -c "import tensorflow as tf; print(f'    tensorflow {tf.__version__}')" 
 echo "  Installing audio processing packages..."
 $PIP install piper-phonemize piper-tts espeak-phonemizer webrtcvad mutagen torchinfo==1.8.0 torchmetrics==0.11.4 \
     speechbrain==0.5.14 audiomentations==0.30.0 torch-audiomentations==0.11.0 \
-    acoustics==0.2.6 pronouncing datasets==2.14.4 deep-phonemizer==0.0.19 \
+    acoustics==0.2.6 pronouncing "datasets==2.14.4" "pyarrow<15.0.0" deep-phonemizer==0.0.19 \
     soundfile librosa pyyaml
 echo "  Audio packages installed."
 
