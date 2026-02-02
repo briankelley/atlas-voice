@@ -365,26 +365,36 @@ if [ ! -d "mit_rirs" ] || [ -z "$(ls -A mit_rirs 2>/dev/null)" ]; then
     rm -rf mit_rirs
     mkdir -p mit_rirs
     echo "  Downloading MIT RIRs from HuggingFace..."
-    # Use huggingface_hub directly instead of datasets (avoids fsspec glob issues)
+    # Use snapshot_download with tqdm progress (replaces deprecated huggingface-cli)
     $PYTHON << 'EOF'
-from huggingface_hub import HfApi, hf_hub_download
+from huggingface_hub import snapshot_download
+import shutil
 import os
 
-api = HfApi()
 repo_id = "davidscripka/MIT_environmental_impulse_responses"
-output_dir = "./mit_rirs"
+temp_dir = "./mit_rirs_temp"
 
-# List all files in the dataset repo
-files = api.list_repo_files(repo_id, repo_type="dataset")
-wav_files = [f for f in files if f.endswith('.wav')]
+# Download entire dataset with progress bar
+print("  Downloading (tqdm progress below)...")
+snapshot_download(
+    repo_id=repo_id,
+    repo_type="dataset",
+    local_dir=temp_dir,
+    local_dir_use_symlinks=False
+)
 
-print(f"  Found {len(wav_files)} WAV files to download...")
-for i, f in enumerate(wav_files):
-    if (i + 1) % 50 == 0:
-        print(f"  Downloaded {i + 1}/{len(wav_files)}...")
-    local_path = hf_hub_download(repo_id=repo_id, filename=f, repo_type="dataset", local_dir=output_dir)
+# Move WAV files to mit_rirs and count them
+wav_count = 0
+for root, dirs, files in os.walk(temp_dir):
+    for f in files:
+        if f.endswith('.wav'):
+            src = os.path.join(root, f)
+            shutil.move(src, f"./mit_rirs/{f}")
+            wav_count += 1
 
-print(f"  Saved {len(wav_files)} room impulse responses")
+# Clean up temp directory
+shutil.rmtree(temp_dir, ignore_errors=True)
+print(f"  Saved {wav_count} room impulse responses")
 EOF
     # Flatten directory structure - files may be in subdirectories like 16khz/
     # Training code expects WAV files directly in mit_rirs/
@@ -406,25 +416,22 @@ echo "[Step 3/6] Downloading background audio..."
 if [ ! -d "musan_music" ] || [ -z "$(ls -A musan_music 2>/dev/null)" ]; then
     rm -rf musan_music
     echo "  Downloading MUSAN music (pre-processed 16kHz, ~4.6GB)..."
+    # Use snapshot_download with tqdm progress (replaces deprecated huggingface-cli)
+    $PYTHON << EOF
+from huggingface_hub import snapshot_download
 
-    # Download each subdirectory from HuggingFace
-    mkdir -p musan_music
-    for subdir in fma fma-western-art hd-classical jamendo rfm; do
-        echo "    Downloading musan_music/${subdir}..."
-        huggingface-cli download "$HF_DATASET" --repo-type dataset \
-            --include "musan_music/${subdir}/*" \
-            --local-dir . --local-dir-use-symlinks False 2>/dev/null || {
-            # Fallback: download files individually if huggingface-cli fails
-            echo "    Falling back to wget..."
-            mkdir -p "musan_music/${subdir}"
-            # Get file list from HF API and download
-            curl -s "https://huggingface.co/api/datasets/${HF_DATASET}/tree/main/musan_music/${subdir}" | \
-                grep -oP '"path":"musan_music/[^"]+\.wav"' | cut -d'"' -f4 | while read f; do
-                    wget -q -nv -P "musan_music/${subdir}" "${HF_BASE}/${f}"
-                done
-        }
-    done
-    echo "  MUSAN music downloaded (already 16kHz, no conversion needed)."
+repo_id = "${HF_DATASET}"
+
+print("  Downloading (tqdm progress below)...")
+snapshot_download(
+    repo_id=repo_id,
+    repo_type="dataset",
+    allow_patterns="musan_music/**",
+    local_dir=".",
+    local_dir_use_symlinks=False
+)
+print("  MUSAN music downloaded.")
+EOF
 else
     echo "  MUSAN music already downloaded."
 fi
