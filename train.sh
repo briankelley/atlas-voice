@@ -386,9 +386,13 @@ for i, f in enumerate(wav_files):
 
 print(f"  Saved {len(wav_files)} room impulse responses")
 EOF
+    # Clean up huggingface cache directory (training code tries to load it as audio)
+    rm -rf mit_rirs/.cache
 else
     echo "  MIT RIRs already downloaded."
 fi
+# Also clean up any .cache that might exist from previous runs
+rm -rf mit_rirs/.cache 2>/dev/null || true
 echo "  [Step 2/6] DONE"
 echo ""
 
