@@ -342,7 +342,7 @@ $PYTHON -c "import tensorflow as tf; print(f'    tensorflow {tf.__version__}')" 
 echo "  Installing audio processing packages..."
 $PIP install piper-phonemize piper-tts espeak-phonemizer webrtcvad mutagen torchinfo==1.8.0 torchmetrics==0.11.4 \
     speechbrain==0.5.14 audiomentations==0.30.0 torch-audiomentations==0.11.0 \
-    acoustics==0.2.6 pronouncing "datasets==2.14.4" "pyarrow<15.0.0" deep-phonemizer==0.0.19 \
+    acoustics==0.2.6 pronouncing "datasets==2.14.4" "pyarrow<15.0.0" "fsspec<2024.1.0" deep-phonemizer==0.0.19 \
     soundfile librosa pyyaml
 echo "  Audio packages installed."
 
