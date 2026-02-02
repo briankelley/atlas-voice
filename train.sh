@@ -309,6 +309,22 @@ $PIP install "numpy<2.0" scipy tqdm
 echo "  [Step 0/6] DONE"
 echo ""
 
+# Ask about download method if not specified via --tarball flag
+if [ "$USE_TARBALL" = false ]; then
+    echo "=============================================="
+    echo "Download Method"
+    echo "=============================================="
+    echo "Training data can be downloaded as:"
+    echo "  1) Individual files (~25GB total, downloads only what's needed)"
+    echo "  2) Single tarball (~20GB archive, faster if you have good bandwidth)"
+    echo ""
+    read -p "Use tarball method? [y/N]: " tarball_choice
+    if [[ "$tarball_choice" =~ ^[Yy]$ ]]; then
+        USE_TARBALL=true
+    fi
+    echo ""
+fi
+
 # Tarball option: download everything in one archive
 if [ "$USE_TARBALL" = true ]; then
     echo "[Tarball Mode] Downloading all training data as single archive..."
