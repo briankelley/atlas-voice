@@ -270,7 +270,8 @@ echo ""
 # Step 6c: Train neural network
 echo "  [6c] Training neural network (GPU accelerated)..."
 echo "       Started: $(date)"
-python3 /app/openWakeWord/openwakeword/train.py --training_config "$CONFIG" --train_model || true
+TRAIN_LOG="/tmp/train_output.log"
+python3 /app/openWakeWord/openwakeword/train.py --training_config "$CONFIG" --train_model 2>&1 | tee "$TRAIN_LOG" || true
 echo "       Finished: $(date)"
 
 # Check if model was saved (segfault on cleanup is expected - model is saved before that)
@@ -281,6 +282,11 @@ else
     echo "  ERROR: Training failed - model file not found"
     exit 1
 fi
+
+# Extract training stats from log
+ACCURACY=$(grep -oP 'Final Model Accuracy: \K[\d.]+' "$TRAIN_LOG" 2>/dev/null || echo "")
+RECALL=$(grep -oP 'Final Model Recall: \K[\d.]+' "$TRAIN_LOG" 2>/dev/null || echo "")
+FP_HR=$(grep -oP 'Final Model False Positives per Hour: \K[\d.]+' "$TRAIN_LOG" 2>/dev/null || echo "")
 
 # Convert ONNX to TFLite
 TFLITE_FILE="${MODEL_NAME}_model/${MODEL_NAME}.tflite"
@@ -312,12 +318,32 @@ echo "[Output] Copying model files to /output..."
 cp -v "${MODEL_NAME}_model/${MODEL_NAME}.onnx" /output/
 cp -v "${MODEL_NAME}_model/${MODEL_NAME}.tflite" /output/ 2>/dev/null || echo "  TFLite not available"
 
+# Model size
+ONNX_SIZE=$(du -h "/output/${MODEL_NAME}.onnx" 2>/dev/null | cut -f1)
+TFLITE_SIZE=$(du -h "/output/${MODEL_NAME}.tflite" 2>/dev/null | cut -f1)
+
 echo ""
-echo "=============================================="
-echo "TRAINING COMPLETE"
-echo "=============================================="
-echo "Finished: $(date)"
+echo "═══════════════════════════════════════════════════════"
+echo "  Training Complete!"
+echo "  Wake word: \"$WAKE_WORD\""
+echo "  Finished:  $(date)"
 echo ""
-echo "Model files in /output:"
-ls -la /output/
+echo "  Models:"
+echo "    ${MODEL_NAME}.onnx    ($ONNX_SIZE)"
+echo "    ${MODEL_NAME}.tflite  ($TFLITE_SIZE)"
+echo ""
+if [ -n "$ACCURACY" ] && [ -n "$RECALL" ] && [ -n "$FP_HR" ]; then
+    # Round to 2 decimal places
+    ACC_PCT=$(python3 -c "print(f'{${ACCURACY}*100:.2f}')")
+    REC_PCT=$(python3 -c "print(f'{${RECALL}*100:.2f}')")
+    FP_RND=$(python3 -c "print(f'{${FP_HR}:.2f}')")
+    echo "  Accuracy:  ${ACC_PCT}%  (how well it tells your wake word apart from everything else)"
+    echo "  Recall:    ${REC_PCT}%  (how often it catches your wake word — higher = less repeating yourself)"
+    echo "  FP/hr:     ${FP_RND}    (phantom activations per hour when you're not speaking the wake word)"
+else
+    echo "  (Training stats not found in log output)"
+fi
+echo ""
+echo "  Output directory: /output/"
+echo "═══════════════════════════════════════════════════════"
 echo ""

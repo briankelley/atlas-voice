@@ -1,125 +1,145 @@
-# Atlas Voice - Custom Wake Word Training
+# OpenWakeWord Custom Wake Word Training (Dockerized)
 
-Train your own wake word for [OpenWakeWord](https://github.com/dscripka/openWakeWord) using synthetic speech generation.
+Train your own custom wake word model for [OpenWakeWord](https://github.com/dscripka/openWakeWord) — fully containerized so you never have to fight the dependency stack yourself.
 
-This repo provides everything needed to train a custom wake word model, packaged for reproducibility.
+## What This Does
 
-## ⚠️ Fair Warning
+You pick a wake word. The script builds a Docker container, downloads training data, generates thousands of synthetic speech samples, augments them with noise and room acoustics, trains a neural network, and outputs a tiny model file (~200KB) that can listen for your wake word 24/7.
 
-*This training pipeline was an absolute nightmare to get working.* The dependency stack is fragile - specific versions of PyTorch, TensorFlow, protobuf, and CUDA that all need to play nice together. The script in this repo represents hours of trial and error, failed downloads, version conflicts, and fixes for issues that weren't documented anywhere.
+## Requirements
 
-*What's pinned in this script works.* If you start changing versions or have conflicting packages on your system, expect problems. The venv *should* isolate you, but CUDA mismatches in particular will ruin your day.
+- **NVIDIA GPU** with CUDA support
+- **Docker** with [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
+- **~45GB free disk space** (20GB training data + container workspace)
 
-If training fails:
-- **Read the error carefully** - version conflicts are usually obvious
-- **Check your CUDA version** - `nvidia-smi` and `nvcc --version` should roughly agree
-- **Try the Docker option** - it exists for a reason
-- **File an issue** - but include your OS, Python version, CUDA version, and the actual error
-
-This isn't a polished product. It's a "worked on my machine, hopefully works on yours" situation.
+That's it. Python version, CUDA version, package conflicts — none of that matters. It's all inside the container.
 
 ## Quick Start
 
-### Option 1: Docker (Recommended)
-
 ```bash
-# Clone this repo
 git clone https://github.com/brianckelley/atlas-voice.git
 cd atlas-voice
-
-# Build the training environment
-docker build -t atlas-voice-training .
-
-# Run training (GPU passthrough for TensorFlow)
-docker run --gpus all -v $(pwd)/output:/output atlas-voice-training
-
-# OR: Use tarball mode for faster download
-docker run --gpus all -v $(pwd)/output:/output atlas-voice-training --tarball
+./train-wakeword.sh
 ```
 
-### Option 2: Local Installation
+The script walks you through everything interactively:
 
-```bash
-# Clone and run the training script
-git clone https://github.com/brianckelley/atlas-voice.git
-cd atlas-voice
+1. **Builds the Docker image** (first run only, cached after that)
+2. **Asks if you want to proceed** with the ~20GB training data download
+3. **Asks for your wake word** with guidance on what works best
+4. **Shows default training settings** with the option to customize
+5. **Confirms and launches training** inside the container
+6. **Outputs your model** to `docker-output/` with accuracy stats
 
-# Standard mode (downloads files as needed)
-./train.sh
+### Output
 
-# OR: Tarball mode (download everything first as single ~20GB archive)
-./train.sh --tarball
+When training completes, you'll see something like:
+
 ```
+═══════════════════════════════════════════════════════
+  Training Complete!
+  Wake word: "Hey Atlas"
 
-**Requirements:**
-- Python 3.10
-- NVIDIA GPU with CUDA (for training)
-- ~25GB disk space for training data
-- `espeak-ng`, `ffmpeg` (system packages)
-- `huggingface-cli` (for downloading, installed automatically in venv)
+  Models:
+    hey_atlas.onnx    (201K)
+    hey_atlas.tflite  (207K)
 
-## What Gets Trained
+  Accuracy:  81.07%  (how well it tells your wake word apart from everything else)
+  Recall:    62.20%  (how often it catches your wake word — higher = less repeating yourself)
+  FP/hr:     1.24    (phantom activations per hour when you're not speaking the wake word)
 
-The default config trains a "Hey Atlas" wake word. Edit `hey_atlas_config.yml` to change:
-
-- `target_phrase` - The wake word/phrase to detect
-- `custom_negative_phrases` - Similar phrases to NOT activate on
-- `n_samples` - Number of synthetic training samples (more = better, slower)
-
-## Training Data
-
-Training data is hosted at [brianckelley/atlas-voice-training-data](https://huggingface.co/datasets/brianckelley/atlas-voice-training-data) on HuggingFace:
-
-| File | Size | Description |
-|------|------|-------------|
-| `openwakeword_features_ACAV100M_2000_hrs_16bit.npy` | 17GB | Pre-computed negative examples |
-| `musan_music/` | 4.6GB | Background audio for augmentation |
-| `validation_set_features.npy` | 177MB | False positive testing |
-| `piper_tts_model/en-us-libritts-high.pt` | 200MB | Synthetic speech generation |
-| `archive/atlas-voice-training-data.tar.gz` | 20GB | All of the above in one archive |
-
-Use `--tarball` to download everything as a single archive instead of individual files.
-
-## Output
-
-After training completes, you'll have:
-- `hey_atlas.tflite` - TensorFlow Lite model for inference
-- `hey_atlas.onnx` - ONNX model (alternative runtime)
+  Output directory: /output/
+═══════════════════════════════════════════════════════
+```
 
 Copy the `.tflite` file to `~/.local/share/openwakeword/` for use with OpenWakeWord.
 
-## Training Steps
+## Wake Word Selection
 
-The training script runs three phases:
+**Use a two-word phrase.** This was the single biggest factor in model quality across every configuration tested. A prefix like "Hey" or "Okay" gives the model a stronger acoustic signature to lock onto.
 
-1. **Generate clips** - Create synthetic speech samples with Piper TTS
-2. **Augment clips** - Add noise, reverb, pitch shifts (runs on CPU)
-3. **Train model** - Train neural network (uses GPU)
+| Wake Word | Accuracy | Recall | FP/hr | Verdict |
+|-----------|----------|--------|-------|---------|
+| "Hey Atlas" (50k samples) | **81.10%** | **62.48%** | 2.12 | Best overall |
+| "Hey Atlas" (100k samples) | 77.47% | 55.08% | **0.62** | More conservative, worse recall |
+| "Atlas" (50k, 3 aug rounds) | 71.64% | 43.54% | 2.57 | Single word, consistently worse |
+| "Atlas" (50k, 64 neurons) | 71.94% | 44.04% | 2.48 | Extra neurons didn't help |
 
-## Roadmap / Future Ideas
+No combination of augmentation rounds, sample count, or neuron depth compensated for dropping the "Hey" prefix.
 
-This is just the foundation. Potential directions:
+## Training Settings
 
-- **Multiple wake words** - Different phrases trigger different actions
-- **Voice commands** - "Hey Atlas, run tests" → executes scripts
-- **Context-aware responses** - Behavior changes based on active window/app
-- **Local voice assistant** - Privacy-respecting alternative to cloud assistants
-- **Continuous listening modes** - Transcribe meetings, lectures, conversations
-- **Custom vocabulary** - Domain-specific word replacements and corrections
-- **Integration hooks** - Connect to home automation, IDE commands, system controls
+The defaults produce the best balance of accuracy and recall based on empirical testing. The script shows you all settings before training and lets you customize if you want to experiment.
 
-Contributions and ideas welcome.
+| Setting | Default | What It Does | Testing Notes |
+|---------|---------|--------------|---------------|
+| Samples | 50,000 | Number of synthetic speech clips generated | Doubling to 100k didn't improve accuracy or recall |
+| Augmentation rounds | 2 | Times each clip is re-processed with noise/reverb | 3 rounds produced no measurable improvement |
+| Training steps | 100,000 | Neural network training iterations | 150k steps didn't improve results |
+| Layer size | 32 | Neurons per hidden layer | 64 neurons produced identical results to 32 |
+
+## Training Data
+
+Training data is hosted on [HuggingFace](https://huggingface.co/datasets/brianckelley/atlas-voice-training-data) and downloaded automatically in standalone mode (~20GB as a single tarball).
+
+| File | Size | Purpose |
+|------|------|---------|
+| ACAV100M features | 17 GB | 2,000 hours of pre-computed negative examples |
+| MUSAN music | 4.6 GB | Background audio for augmentation |
+| Validation features | 177 MB | False positive testing during training |
+| Piper TTS model | 200 MB | Synthetic speech generation |
+
+MIT Room Impulse Responses (~300MB) are downloaded separately from [MIT](https://mcdermottlab.mit.edu/Reverb/IRMAudio/Audio.zip) and converted to 16kHz automatically.
+
+## How It Works
+
+Training runs in three phases inside the container:
+
+1. **Generate clips** — Piper TTS creates thousands of synthetic pronunciations of your wake word with varying voices, speeds, and pitch
+2. **Augment clips** — Each clip is layered with room reverb, background noise, and acoustic conditions (runs on CPU)
+3. **Train model** — A neural network learns to distinguish your wake word from everything else (runs on GPU)
+
+The output is an ONNX model and a TFLite model, both under 250KB.
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `train-wakeword.sh` | What you run — interactive host wrapper |
+| `container-entrypoint.sh` | Runs inside the Docker container |
+| `Dockerfile.training` | Builds the training environment |
+| `validate_model.py` | Compare model accuracy against test data |
+
+## The Dependency Problem
+
+This project exists because training OpenWakeWord models in 2026 is a dependency nightmare. The training pipeline requires PyTorch 1.13.1, TensorFlow 2.8.1, and dozens of other packages pinned to 2022-era versions that conflict with modern Python. The `train.sh` script in this repo documents every fix discovered through days of debugging, but the Docker approach is the answer: freeze the entire environment in a container and never think about it again.
+
+### Issues encountered and fixed (all from the upstream dependency stack):
+
+1. `torch==1.13.1` — no wheels for Python 3.12+
+2. `pyarrow` — broke `datasets` API (pinned `<15.0.0`)
+3. `fsspec` — broke `datasets` glob patterns (pinned `<2024.1.0`)
+4. `webrtcvad` — needs C compilation, undocumented dependency on `build-essential`
+5. `python3.10-venv` — version-specific package naming
+6. HuggingFace download leaves `.cache` directories that break training
+7. MIT RIR files nested in `16khz/` subdirectory
+8. MIT RIR files are 32kHz, training expects 16kHz
+9. Docker shared memory — PyTorch DataLoader needs `--shm-size=32g`
+10. HuggingFace rate limiting from repeated individual file downloads
+11. Training segfaults on cleanup after model is already saved (harmless)
+12. Python output buffering in Docker hides progress (`PYTHONUNBUFFERED=1`)
 
 ## License
 
-- Training script and configs: Apache 2.0
+- Training scripts and configs: Apache 2.0
 - ACAV100M features: CC-BY-NC-SA-4.0 (non-commercial)
 - MUSAN: CC BY 4.0
 
-**Note:** The CC-BY-NC-SA-4.0 license on ACAV100M means trained models cannot be used commercially.
+**Note:** The CC-BY-NC-SA-4.0 license on ACAV100M means trained models inherit a non-commercial restriction.
 
 ## Acknowledgments
 
 - [OpenWakeWord](https://github.com/dscripka/openWakeWord) by David Scripka
 - [Piper TTS](https://github.com/rhasspy/piper) by Rhasspy
 - [MUSAN](https://www.openslr.org/17/) corpus
+- [MIT Room Impulse Responses](https://mcdermottlab.mit.edu/Reverb/IRMAudio/Audio.zip)
