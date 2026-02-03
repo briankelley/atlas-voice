@@ -21,7 +21,7 @@ OUTPUT_DIR="$SCRIPT_DIR/docker-output"
 mkdir -p "$OUTPUT_DIR"
 
 # Tarball download URL for standalone mode
-TARBALL_URL="${TARBALL_URL:-https://brianckelley.com/files/atlas-voice-training-data.tar.gz}"
+TARBALL_URL="${TARBALL_URL:-https://huggingface.co/datasets/brianckelley/atlas-voice-training-data/resolve/main/atlas-voice-training-data.tar.gz}"
 
 # Parse arguments
 REBUILD=false
@@ -172,9 +172,9 @@ if [[ "$REPLY" =~ ^[Nn]$ ]]; then
     echo "In testing, doubling from 50k to 100k did NOT"
     echo "improve accuracy or recall. It reduced false"
     echo "positives but at the cost of missing more real"
-    echo "wake words. 50k is the sweet spot."
+    echo "wake words."
     echo ""
-    read -p "Samples [$N_SAMPLES]: " INPUT
+    read -p "Samples [default: $N_SAMPLES]: " INPUT
     N_SAMPLES="${INPUT:-$N_SAMPLES}"
     echo ""
 
@@ -191,9 +191,10 @@ if [[ "$REPLY" =~ ^[Nn]$ ]]; then
     echo ""
     echo "In testing, 3 rounds produced no measurable"
     echo "improvement over 2 for wake word detection."
-    echo "May help in very noisy environments."
+    echo "May help if you plan to use this where there's"
+    echo "plenty of ambient noise."
     echo ""
-    read -p "Augmentation rounds [$AUGMENTATION_ROUNDS]: " INPUT
+    read -p "Augmentation rounds [default: $AUGMENTATION_ROUNDS]: " INPUT
     AUGMENTATION_ROUNDS="${INPUT:-$AUGMENTATION_ROUNDS}"
     echo ""
 
@@ -209,7 +210,7 @@ if [[ "$REPLY" =~ ^[Nn]$ ]]; then
     echo "100k steps on an RTX 4090 takes ~20 minutes."
     echo "150k steps did not improve results in testing."
     echo ""
-    read -p "Training steps [$TRAINING_STEPS]: " INPUT
+    read -p "Training steps [default: $TRAINING_STEPS]: " INPUT
     TRAINING_STEPS="${INPUT:-$TRAINING_STEPS}"
     echo ""
 
@@ -225,7 +226,7 @@ if [[ "$REPLY" =~ ^[Nn]$ ]]; then
     echo "identical results to 32 for wake word models."
     echo "The output model stays tiny either way (~200 KB)."
     echo ""
-    read -p "Layer size [$LAYER_SIZE]: " INPUT
+    read -p "Layer size [default: $LAYER_SIZE]: " INPUT
     LAYER_SIZE="${INPUT:-$LAYER_SIZE}"
     echo ""
 fi
