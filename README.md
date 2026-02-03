@@ -4,7 +4,7 @@ Train your own custom wake word model for [OpenWakeWord](https://github.com/dscr
 
 ## What This Does
 
-You pick a wake word. The script builds a Docker container, downloads training data, generates thousands of synthetic speech samples, augments them with noise and room acoustics, trains a neural network, and outputs a tiny model file (~200KB) that can listen for your wake word 24/7.
+Builds a Docker container, downloads training data, generates synthetic speech samples, augments them with common noise, trains a neural network, and outputs a model file (~200KB) that can listen for your wake word.
 
 ## Requirements
 
@@ -12,7 +12,7 @@ You pick a wake word. The script builds a Docker container, downloads training d
 - **Docker** with [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
 - **~45GB free disk space** (20GB training data + container workspace)
 
-That's it. Python version, CUDA version, package conflicts — none of that matters. It's all inside the container.
+All packages and dependencies are handled inside the container.
 
 ## Quick Start
 
@@ -22,18 +22,16 @@ cd atlas-voice
 ./train-wakeword.sh
 ```
 
-The script walks you through everything interactively:
+Launch the main script and it'll walk you through the process:
 
 1. **Builds the Docker image** (first run only, cached after that)
 2. **Asks if you want to proceed** with the ~20GB training data download
-3. **Asks for your wake word** with guidance on what works best
-4. **Shows default training settings** with the option to customize
-5. **Confirms and launches training** inside the container
-6. **Outputs your model** to `docker-output/` with accuracy stats
+3. **Asks for your wake word** with advice on what works best
+4. **Shows default training settings** (configurable)
+5. **Launches training** inside the container
+6. **Models saved** to `docker-output/`
 
 ### Output
-
-When training completes, you'll see something like:
 
 ```
 ═══════════════════════════════════════════════════════
@@ -52,11 +50,21 @@ When training completes, you'll see something like:
 ═══════════════════════════════════════════════════════
 ```
 
+## Using the Model
+
 Copy the `.tflite` file to `~/.local/share/openwakeword/` for use with OpenWakeWord.
+
+The trained model handles wake word detection only. To build a full voice input pipeline, you also need:
+
+| Package | Purpose |
+|---------|---------|
+| [OpenWakeWord](https://github.com/dscripka/openWakeWord) | Loads the `.tflite` model and listens for the wake word |
+| [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | Speech-to-text transcription after the wake word triggers |
+| [sounddevice](https://python-sounddevice.readthedocs.io/) | Audio capture from your microphone |
 
 ## Wake Word Selection
 
-**Use a two-word phrase.** This was the single biggest factor in model quality across every configuration tested. A prefix like "Hey" or "Okay" gives the model a stronger acoustic signature to lock onto.
+**Use a two-word phrase.** This was a big factor in model quality across every configuration I tested. A prefix like "Hey" or "Okay" gives the model a stronger acoustic signature.
 
 | Wake Word | Accuracy | Recall | FP/hr | Verdict |
 |-----------|----------|--------|-------|---------|
@@ -65,13 +73,13 @@ Copy the `.tflite` file to `~/.local/share/openwakeword/` for use with OpenWakeW
 | "Atlas" (50k, 3 aug rounds) | 71.64% | 43.54% | 2.57 | Single word, consistently worse |
 | "Atlas" (50k, 64 neurons) | 71.94% | 44.04% | 2.48 | Extra neurons didn't help |
 
-No combination of augmentation rounds, sample count, or neuron depth compensated for dropping the "Hey" prefix.
+No combination of augmentation rounds, sample count, or neuron depth made the model more accurate when the "Hey" prefix was dropped.
 
 ## Training Settings
 
-The defaults produce the best balance of accuracy and recall based on empirical testing. The script shows you all settings before training and lets you customize if you want to experiment.
+The defaults produce the best balance of accuracy and recall based on empirical testing. You can change this before training. Hat tip to [@dscripka](https://github.com/dscripka) for great defaults.
 
-| Setting | Default | What It Does | Testing Notes |
+| Setting | Default | Purpose | Testing Notes |
 |---------|---------|--------------|---------------|
 | Samples | 50,000 | Number of synthetic speech clips generated | Doubling to 100k didn't improve accuracy or recall |
 | Augmentation rounds | 2 | Times each clip is re-processed with noise/reverb | 3 rounds produced no measurable improvement |
@@ -93,7 +101,7 @@ MIT Room Impulse Responses (~300MB) are downloaded separately from [MIT](https:/
 
 ## How It Works
 
-Training runs in three phases inside the container:
+Training runs in three phases inside the container (start to finish with defaults and broadband is ~1h on a 4090):
 
 1. **Generate clips** — Piper TTS creates thousands of synthetic pronunciations of your wake word with varying voices, speeds, and pitch
 2. **Augment clips** — Each clip is layered with room reverb, background noise, and acoustic conditions (runs on CPU)
@@ -105,7 +113,7 @@ The output is an ONNX model and a TFLite model, both under 250KB.
 
 | File | Purpose |
 |------|---------|
-| `train-wakeword.sh` | What you run — interactive host wrapper |
+| `train-wakeword.sh` | What you run — interactive host wrapper (run this on your rig) |
 | `container-entrypoint.sh` | Runs inside the Docker container |
 | `Dockerfile.training` | Builds the training environment |
 | `validate_model.py` | Compare model accuracy against test data |
