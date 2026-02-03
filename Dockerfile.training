@@ -1,0 +1,134 @@
+# OpenWakeWord Custom Model Training Environment
+#
+# This Dockerfile creates a fully isolated training environment with all
+# dependencies pre-installed. The fragile dependency stack (torch 1.13.1,
+# tensorflow 2.8.1, etc.) is frozen here so it works regardless of what
+# Python version or packages are on the host system.
+#
+# Build:  docker build -f Dockerfile.training -t atlas-voice-training .
+# Run:    ./train-wakeword.sh (uses wrapper script for proper mounts)
+#
+# Manual run example:
+#   docker run --gpus all \
+#     -v /path/to/training-data:/data:ro \
+#     -v /path/to/output:/output \
+#     atlas-voice-training
+
+FROM nvidia/cuda:11.7.1-cudnn8-runtime-ubuntu22.04
+
+# Prevent interactive prompts during apt install
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Etc/UTC
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
+    python3.10 \
+    python3.10-venv \
+    python3.10-dev \
+    python3-pip \
+    git \
+    wget \
+    curl \
+    unzip \
+    ffmpeg \
+    espeak-ng \
+    libespeak-ng-dev \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.10 as default
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1
+
+WORKDIR /app
+
+# Upgrade pip and install base packages
+RUN python3.10 -m pip install --upgrade pip wheel setuptools
+
+# Install exact pinned versions that work together
+# This is the fragile stack - DO NOT change versions without testing
+
+# NumPy (must be <2.0 for compatibility)
+RUN python3.10 -m pip install "numpy<2.0" scipy tqdm
+
+# PyTorch stack (1.13.1 for CUDA 11.7)
+RUN python3.10 -m pip install \
+    torch==1.13.1+cu117 \
+    torchaudio==0.13.1+cu117 \
+    --extra-index-url https://download.pytorch.org/whl/cu117
+
+# TensorFlow stack (CPU version - GPU used for PyTorch, TF just for conversion)
+RUN python3.10 -m pip install \
+    protobuf==3.20.3 \
+    tensorflow-cpu==2.8.1 \
+    tensorflow_probability==0.16.0 \
+    onnx==1.14.0 \
+    onnx_tf==1.10.0
+
+# Audio processing packages
+RUN python3.10 -m pip install \
+    piper-phonemize \
+    piper-tts \
+    espeak-phonemizer \
+    webrtcvad \
+    mutagen \
+    torchinfo==1.8.0 \
+    torchmetrics==0.11.4 \
+    speechbrain==0.5.14 \
+    audiomentations==0.30.0 \
+    torch-audiomentations==0.11.0 \
+    acoustics==0.2.6 \
+    pronouncing \
+    "datasets==2.14.4" \
+    "pyarrow<15.0.0" \
+    "fsspec<2024.1.0" \
+    deep-phonemizer==0.0.19 \
+    soundfile \
+    librosa \
+    pyyaml \
+    huggingface_hub
+
+# Clone openWakeWord (pinned to known working commit)
+RUN git clone https://github.com/dscripka/openWakeWord /app/openWakeWord \
+    && cd /app/openWakeWord && git checkout 368c03716d1e92591906a84949bc477f3a834455 \
+    && python3.10 -m pip install -e /app/openWakeWord
+
+# Clone piper-sample-generator (pinned to known working commit) and patch for progress logging
+RUN git clone https://github.com/dscripka/piper-sample-generator /app/piper-sample-generator \
+    && cd /app/piper-sample-generator && git checkout f1988a4d54eddb23d99e86f0adfef6226a85acc7 \
+    && sed -i 's/_LOGGER.debug/_LOGGER.info/' /app/piper-sample-generator/generate_samples.py
+
+# Download embedding models
+RUN mkdir -p /app/openWakeWord/openwakeword/resources/models \
+    && wget -q -O /app/openWakeWord/openwakeword/resources/models/embedding_model.onnx \
+        "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.onnx" \
+    && wget -q -O /app/openWakeWord/openwakeword/resources/models/embedding_model.tflite \
+        "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.tflite" \
+    && wget -q -O /app/openWakeWord/openwakeword/resources/models/melspectrogram.onnx \
+        "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.onnx" \
+    && wget -q -O /app/openWakeWord/openwakeword/resources/models/melspectrogram.tflite \
+        "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.tflite"
+
+# Download TTS model for piper-sample-generator
+RUN mkdir -p /app/piper-sample-generator/models \
+    && wget -q -O /app/piper-sample-generator/models/en-us-libritts-high.pt \
+        "https://huggingface.co/datasets/brianckelley/atlas-voice-training-data/resolve/main/piper_tts_model/en-us-libritts-high.pt"
+
+# Create directories for mounted data and output
+RUN mkdir -p /data /output /workspace
+
+# Copy training script (config is generated at runtime from user input)
+COPY container-entrypoint.sh /app/container-entrypoint.sh
+RUN chmod +x /app/container-entrypoint.sh
+
+# Verify installations
+RUN python3.10 -c "import torch; print(f'PyTorch {torch.__version__}, CUDA: {torch.cuda.is_available()}')" \
+    && python3.10 -c "import tensorflow as tf; print(f'TensorFlow {tf.__version__}')" 2>/dev/null || true \
+    && python3.10 -c "import openwakeword; print('OpenWakeWord OK')"
+
+# Default command
+CMD ["/app/container-entrypoint.sh"]

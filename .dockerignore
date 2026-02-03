@@ -1,0 +1,4 @@
+docker-output/
+docker-*.log
+*.log
+.git/
