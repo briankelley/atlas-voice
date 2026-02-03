@@ -1,8 +1,8 @@
 # OpenWakeWord Custom Wake Word Training (Dockerized)
 
-Train your own custom wake word model for [OpenWakeWord](https://github.com/dscripka/openWakeWord) — fully containerized so you never have to fight the dependency stack yourself.
+Train your own custom wake word model for [OpenWakeWord](https://github.com/dscripka/openWakeWord) — *fully containerized*.
 
-## What This Does
+## Objective
 
 Builds a Docker container, downloads training data, generates synthetic speech samples, augments them with common noise, trains a neural network, and outputs a model file (~200KB) that can listen for your wake word.
 
@@ -69,7 +69,8 @@ The trained model handles wake word detection only. To build a full voice input 
 | Wake Word | Accuracy | Recall | FP/hr | Verdict |
 |-----------|----------|--------|-------|---------|
 | "Hey Atlas" (50k samples) | **81.10%** | **62.48%** | 2.12 | Best overall |
-| "Hey Atlas" (100k samples) | 77.47% | 55.08% | **0.62** | More conservative, worse recall |
+| "Globe Master" (50k samples) | 81.07% | 62.20% | **1.24** | Two-word phrase, consistent |
+| "Hey Atlas" (100k samples) | 77.47% | 55.08% | 0.62 | More conservative, worse recall |
 | "Atlas" (50k, 3 aug rounds) | 71.64% | 43.54% | 2.57 | Single word, consistently worse |
 | "Atlas" (50k, 64 neurons) | 71.94% | 44.04% | 2.48 | Extra neurons didn't help |
 
@@ -120,7 +121,7 @@ The output is an ONNX model and a TFLite model, both under 250KB.
 
 ## The Dependency Problem
 
-This project exists because training OpenWakeWord models in 2026 is a dependency nightmare. The training pipeline requires PyTorch 1.13.1, TensorFlow 2.8.1, and dozens of other packages pinned to 2022-era versions that conflict with modern Python. The `train.sh` script in this repo documents every fix discovered through days of debugging, but the Docker approach is the answer: freeze the entire environment in a container and never think about it again.
+This project exists because training OpenWakeWord models in 2026 is a dependency nightmare. The training pipeline requires PyTorch 1.13.1, TensorFlow 2.8.1, and dozens of other packages pinned to 2022-era versions that have since aged out of compatibility with modern Python. The `train.sh` script in this repo documents every fix discovered through days of debugging. The Docker image freezes the working environment to the commit date of this branch.
 
 ### Issues encountered and fixed (all from the upstream dependency stack):
 
