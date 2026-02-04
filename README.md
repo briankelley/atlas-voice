@@ -1,6 +1,6 @@
 # OpenWakeWord Custom Wake Word Training (Dockerized)
 
-Train your own custom wake word model for [OpenWakeWord](https://github.com/dscripka/openWakeWord) — *fully containerized*.
+Train your own custom wake word model for [OpenWakeWord](https://github.com/dscripka/openWakeWord) (containerized).
 
 ## Objective
 
