@@ -15,6 +15,7 @@ musan_music/
 
 # Debug/log output
 atlas-voice-debug/
+*.log
 
 # Python
 __pycache__/

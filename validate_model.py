@@ -4,17 +4,19 @@ Validate a wake word model against test features.
 Usage: python validate_model.py /path/to/model.tflite
 """
 
+import os
 import sys
 import numpy as np
 import tensorflow as tf
 
-# Paths to test features
-FEATURES_DIR = "/media/brian/DATA/code/tools/speech-to-text/atlas/training/hey_atlas_model/hey_atlas"
-POSITIVE_TEST = f"{FEATURES_DIR}/positive_features_test.npy"
-NEGATIVE_TEST = f"{FEATURES_DIR}/negative_features_test.npy"
+# Paths to test features - set ATLAS_FEATURES_DIR to your training output directory
+# Example: export ATLAS_FEATURES_DIR=/path/to/training/hey_atlas_model/hey_atlas
+FEATURES_DIR = os.environ.get("ATLAS_FEATURES_DIR", os.path.join(os.path.dirname(__file__), "docker-output"))
+POSITIVE_TEST = os.path.join(FEATURES_DIR, "positive_features_test.npy")
+NEGATIVE_TEST = os.path.join(FEATURES_DIR, "negative_features_test.npy")
 
 # Validation negative features (hours of random audio)
-VALIDATION_FEATURES = "/media/brian/DATA/code/tools/speech-to-text/atlas/training/validation_set_features.npy"
+VALIDATION_FEATURES = os.environ.get("ATLAS_VALIDATION_FEATURES", os.path.join(FEATURES_DIR, "validation_set_features.npy"))
 
 def load_tflite_model(model_path):
     interpreter = tf.lite.Interpreter(model_path=model_path)

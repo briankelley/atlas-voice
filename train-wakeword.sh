@@ -14,7 +14,8 @@ IMAGE_NAME="atlas-voice-training"
 CONTAINER_NAME="atlas-training-$(date +%Y%m%d-%H%M%S)"
 
 # Training data location (where the big .npy files are)
-DATA_DIR="/media/brian/DATA/code/tools/speech-to-text/atlas/training"
+# Set this to your local training data path, or leave empty for standalone mode
+DATA_DIR="${ATLAS_DATA_DIR:-}"
 
 # Output directory for trained models
 OUTPUT_DIR="$SCRIPT_DIR/docker-output"
