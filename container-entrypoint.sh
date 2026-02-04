@@ -338,7 +338,7 @@ if [ -n "$ACCURACY" ] && [ -n "$RECALL" ] && [ -n "$FP_HR" ]; then
     REC_PCT=$(python3 -c "print(f'{${RECALL}*100:.2f}')")
     FP_RND=$(python3 -c "print(f'{${FP_HR}:.2f}')")
     echo "  Accuracy:  ${ACC_PCT}%  (how well it tells your wake word apart from everything else)"
-    echo "  Recall:    ${REC_PCT}%  (how often it catches your wake word — higher = less repeating yourself)"
+    echo "  Recall:    ${REC_PCT}%  (how often it catches your wake word; higher = less repeating yourself)"
     echo "  FP/hr:     ${FP_RND}    (phantom activations per hour when you're not speaking the wake word)"
 else
     echo "  (Training stats not found in log output)"

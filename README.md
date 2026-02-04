@@ -43,7 +43,7 @@ Launch the main script and it'll walk you through the process:
     hey_atlas.tflite  (207K)
 
   Accuracy:  81.07%  (how well it tells your wake word apart from everything else)
-  Recall:    62.20%  (how often it catches your wake word — higher = less repeating yourself)
+  Recall:    62.20%  (how often it catches your wake word; higher = less repeating yourself)
   FP/hr:     1.24    (phantom activations per hour when you're not speaking the wake word)
 
   Output directory: /output/
@@ -104,9 +104,9 @@ MIT Room Impulse Responses (~300MB) are downloaded separately from [MIT](https:/
 
 Training runs in three phases inside the container (start to finish with defaults and broadband is ~1h on a 4090):
 
-1. **Generate clips** — Piper TTS creates thousands of synthetic pronunciations of your wake word with varying voices, speeds, and pitch
-2. **Augment clips** — Each clip is layered with room reverb, background noise, and acoustic conditions (runs on CPU)
-3. **Train model** — A neural network learns to distinguish your wake word from everything else (runs on GPU)
+1. **Generate clips** - Piper TTS creates thousands of synthetic pronunciations of your wake word with varying voices, speeds, and pitch
+2. **Augment clips** - Each clip is layered with room reverb, background noise, and acoustic conditions (runs on CPU)
+3. **Train model** - A neural network learns to distinguish your wake word from everything else (runs on GPU)
 
 The output is an ONNX model and a TFLite model, both under 250KB.
 
@@ -114,7 +114,7 @@ The output is an ONNX model and a TFLite model, both under 250KB.
 
 | File | Purpose |
 |------|---------|
-| `train-wakeword.sh` | What you run — interactive host wrapper (run this on your rig) |
+| `train-wakeword.sh` | What you run - interactive host wrapper (run this on your rig) |
 | `container-entrypoint.sh` | Runs inside the Docker container |
 | `Dockerfile.training` | Builds the training environment |
 | `validate_model.py` | Compare model accuracy against test data |
@@ -125,15 +125,15 @@ This project exists because training OpenWakeWord models in 2026 is a dependency
 
 ### Issues encountered and fixed (all from the upstream dependency stack):
 
-1. `torch==1.13.1` — no wheels for Python 3.12+
-2. `pyarrow` — broke `datasets` API (pinned `<15.0.0`)
-3. `fsspec` — broke `datasets` glob patterns (pinned `<2024.1.0`)
-4. `webrtcvad` — needs C compilation, undocumented dependency on `build-essential`
-5. `python3.10-venv` — version-specific package naming
+1. `torch==1.13.1` - no wheels for Python 3.12+
+2. `pyarrow` - broke `datasets` API (pinned `<15.0.0`)
+3. `fsspec` - broke `datasets` glob patterns (pinned `<2024.1.0`)
+4. `webrtcvad` - needs C compilation, undocumented dependency on `build-essential`
+5. `python3.10-venv` - version-specific package naming
 6. HuggingFace download leaves `.cache` directories that break training
 7. MIT RIR files nested in `16khz/` subdirectory
 8. MIT RIR files are 32kHz, training expects 16kHz
-9. Docker shared memory — PyTorch DataLoader needs `--shm-size=32g`
+9. Docker shared memory - PyTorch DataLoader needs `--shm-size=32g`
 10. HuggingFace rate limiting from repeated individual file downloads
 11. Training segfaults on cleanup after model is already saved (harmless)
 12. Python output buffering in Docker hides progress (`PYTHONUNBUFFERED=1`)
