@@ -2,6 +2,10 @@
 
 Train your own custom wake word model for [OpenWakeWord](https://github.com/dscripka/openWakeWord) (containerized).
 
+## The Dependency Problem
+
+This project exists because training OpenWakeWord models in 2026 is a dependency nightmare. The training pipeline requires PyTorch 1.13.1, TensorFlow 2.8.1, and dozens of other packages pinned to 2022-era versions that have since aged out of compatibility with modern Python. The `train.sh` script in this repo documents every fix discovered through days of debugging. The Docker image freezes the working environment of openWakeWord to commit 368c037 (main on February 1, 2026).
+
 ## Objective
 
 Builds a Docker container, downloads training data, generates synthetic speech samples, augments them with common noise, trains a neural network, and outputs a model file (~200KB) that can listen for your wake word.
