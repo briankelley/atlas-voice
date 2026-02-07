@@ -123,18 +123,6 @@ The output is an ONNX model and a TFLite model, both under 250KB.
 | `Dockerfile.training` | Builds the training environment |
 | `validate_model.py` | Compare model accuracy against test data |
 
-## The Dependency Problem
-
-This project exists because training OpenWakeWord models in 2026 is a dependency nightmare. The training pipeline requires PyTorch 1.13.1, TensorFlow 2.8.1, and dozens of other packages pinned to 2022-era versions that have since aged out of compatibility with modern Python. The `train.sh` script in this repo documents every fix discovered through days of debugging. The Docker image freezes the working environment to the commit date of this branch.
-
-## The 'Godfather' Problem
-
-*Just when I thought I was out, they pull me back in!*
-
-When advances in the usability of AI rekindle a love for programming you resigned from *decades ago*, your experience as full stack programmer is suddenly so dated that the only marginal value it extends is a grasp of pipelines and processes (surprisingly none of that has changed). But being amped up to dig in and no discernable skill or experience in current stacks and syntax changes your role to that of 'prompt engineer'. I'm a touch typist, not the fastest, but I'll hold my own against anyone with enough caffeine. But I'm also 'wordy'. These mix like oil and water.
-
-tl;dr Didn't want to spend 15 minutes pounding out deep context prompts on a keyboard that I could speak in 60 seconds. But I also didn't want to say "Hey Jarvis" to my computer.
-
 ### Issues encountered and fixed (all from the upstream dependency stack):
 
 1. `torch==1.13.1` - no wheels for Python 3.12+
@@ -157,6 +145,14 @@ tl;dr Didn't want to spend 15 minutes pounding out deep context prompts on a key
 - MUSAN: CC BY 4.0
 
 **Note:** The CC-BY-NC-SA-4.0 license on ACAV100M means trained models inherit a non-commercial restriction.
+
+## The 'Godfather' Problem
+
+*Just when I thought I was out, they pull me back in!*
+
+When advances in the usability of AI rekindle a love for programming you resigned from *decades ago*, your experience as full stack programmer is suddenly so dated that the only marginal value it extends is a grasp of pipelines and processes (surprisingly none of that has changed). But being amped up to dig in and no discernable skill or experience in current stacks and syntax changes your role to that of 'prompt engineer'. I'm a touch typist, not the fastest, but I'll hold my own against anyone with enough caffeine. But I'm also 'wordy'. These mix like oil and water.
+
+tl;dr Didn't want to spend 15 minutes pounding out deep context prompts on a keyboard that I could speak in 60 seconds. But I also didn't want to say "Hey Jarvis" to my computer.
 
 ## Acknowledgments
 
