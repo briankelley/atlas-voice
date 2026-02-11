@@ -1,0 +1,91 @@
+#!/bin/bash
+set -e
+
+INSTALL_DIR="/usr/local/lib/atlas-voice"
+MODEL_DIR="$INSTALL_DIR/models/whisper-large-v3"
+MODEL_URL="https://huggingface.co/Systran/faster-whisper-large-v3/resolve/main"
+
+# Source debconf library
+. /usr/share/debconf/confmodule
+
+case "$1" in
+    configure)
+        # Create models directory if needed
+        mkdir -p "$MODEL_DIR"
+
+        # Download Whisper model files if not present
+        if [ ! -f "$MODEL_DIR/model.bin" ]; then
+            echo "Downloading Whisper large-v3 model (~3GB)..."
+            echo "This may take several minutes..."
+
+            cd "$MODEL_DIR"
+
+            # Download model files with progress
+            wget --progress=bar:force:noscroll -O model.bin \
+                "$MODEL_URL/model.bin" 2>&1 | tail -1
+
+            wget -q -O config.json "$MODEL_URL/config.json"
+            wget -q -O tokenizer.json "$MODEL_URL/tokenizer.json"
+            wget -q -O vocabulary.json "$MODEL_URL/vocabulary.json"
+            wget -q -O preprocessor_config.json "$MODEL_URL/preprocessor_config.json"
+
+            echo "Whisper model downloaded successfully."
+        else
+            echo "Whisper model already present."
+        fi
+
+        # Set correct ownership for the model directory
+        if [ -n "$SUDO_USER" ]; then
+            chown -R "$SUDO_USER:$SUDO_USER" "$MODEL_DIR"
+        fi
+
+        # Enable and start systemd user service for the installing user
+        if [ -n "$SUDO_USER" ]; then
+            echo "Enabling Atlas Voice service for user $SUDO_USER..."
+
+            SUDO_UID=$(id -u "$SUDO_USER")
+
+            # Use the user's D-Bus session for systemctl --user commands
+            if [ -S "/run/user/$SUDO_UID/bus" ]; then
+                runuser -u "$SUDO_USER" -- env \
+                    XDG_RUNTIME_DIR="/run/user/$SUDO_UID" \
+                    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$SUDO_UID/bus" \
+                    systemctl --user daemon-reload 2>/dev/null || true
+
+                runuser -u "$SUDO_USER" -- env \
+                    XDG_RUNTIME_DIR="/run/user/$SUDO_UID" \
+                    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$SUDO_UID/bus" \
+                    systemctl --user enable --now atlas-voice.service 2>/dev/null || true
+
+                echo "Service enabled and started."
+            else
+                echo "Note: User session bus not found. Run manually after login:"
+                echo "  systemctl --user enable --now atlas-voice"
+            fi
+
+            # Send desktop notification
+            if command -v notify-send >/dev/null 2>&1; then
+                runuser -u "$SUDO_USER" -- env \
+                    DISPLAY=:0 \
+                    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$SUDO_UID/bus" \
+                    notify-send -i "$INSTALL_DIR/icons/AV_ON.png" \
+                    "Atlas Voice Installed" \
+                    "Service started. Say 'Hey Atlas' to begin dictating." 2>/dev/null || true
+            fi
+        else
+            echo "Note: Run 'systemctl --user enable --now atlas-voice' to enable and start."
+        fi
+        ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+
+    *)
+        echo "postinst called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+db_stop
+
+exit 0

@@ -1,0 +1,28 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    purge)
+        # Remove model files on purge (they're large and downloaded)
+        rm -rf /usr/local/lib/atlas-voice/models/whisper-large-v3
+        echo "Whisper model removed."
+        ;;
+
+    remove)
+        # Clear debconf data so reinstall shows the welcome dialog fresh
+        if command -v db_purge >/dev/null 2>&1; then
+            . /usr/share/debconf/confmodule
+            db_purge
+        fi
+        ;;
+
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        ;;
+
+    *)
+        echo "postrm called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

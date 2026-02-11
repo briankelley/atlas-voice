@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+
+# Models (downloaded by installer)
+models/whisper-large-v3/
+
+# Alternative wake word models (keep only hey_atlas.tflite)
+models/openwakeword/hey_atlas.*Acc*.tflite
+
+# Build artifacts
+build/
+*.deb
+dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

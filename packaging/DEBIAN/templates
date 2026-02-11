@@ -1,0 +1,34 @@
+Template: atlas-voice/welcome
+Type: note
+Description: Atlas Voice Installation
+ Atlas Voice has been installed successfully.
+ .
+ REQUIREMENTS:
+ The following will be downloaded automatically during installation:
+ - Whisper large-v3 speech model (~3GB) from huggingface.co/Systran
+ .
+ All other dependencies (OpenWakeWord, faster-whisper, CUDA runtime
+ libraries, etc.) are bundled in the package and run inside an
+ isolated Python virtual environment for safety and package isolation.
+ .
+ STARTING THE SERVICE:
+ Atlas Voice runs as a systemd user service. It will be enabled and
+ started automatically after installation. To manage it manually:
+ .
+   systemctl --user start atlas-voice
+   systemctl --user stop atlas-voice
+   systemctl --user restart atlas-voice
+   systemctl --user status atlas-voice
+ .
+ The service starts automatically with your desktop session on login.
+ .
+ USAGE:
+ Say "Hey Atlas" to activate voice dictation. Speak your text,
+ then say "break" to finish and transcribe. The transcribed text
+ will be typed into your focused application.
+ .
+ CONTROLS:
+ Click the tray icon to access the menu:
+ - Pause / Resume: Toggle wake word listening on or off
+ - Enable / Disable (GPU): Load or unload models to free VRAM
+ - Quit Atlas: Stop the service
