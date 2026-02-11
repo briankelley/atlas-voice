@@ -4,6 +4,8 @@ Always-listening voice dictation for Linux with wake word activation.
 
 Say **"Hey Atlas"** to start dictating. Your speech is transcribed and typed into the active window. Say **"break"** to end the session and press Enter.
 
+<video src="https://atlasvoice.org/atlas-voice-demo.mp4" controls width="512"></video>
+
 ## Features
 
 - **Wake word activation** — hands-free triggering with custom-trained "Hey Atlas" wake word
