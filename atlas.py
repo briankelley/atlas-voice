@@ -24,6 +24,7 @@ import sys
 import os
 import time
 import re
+import configparser
 from collections import deque
 
 # Ensure DISPLAY is set (needed when launched from environments without it)
@@ -60,123 +61,127 @@ from faster_whisper import WhisperModel
 
 # Base directory (where this script lives)
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_CONFIG_FILE = os.path.join(_BASE_DIR, "settings.conf")
+
+def _load_config():
+    """Load configuration from settings.conf, with sensible defaults."""
+    config = configparser.ConfigParser()
+    config.optionxform = str  # Preserve case (default lowercases keys)
+
+    # Defaults (used if config file is missing or incomplete)
+    defaults = {
+        'wake_word': {'threshold': '0.35'},
+        'audio': {
+            'silence_threshold': '500',
+            'silence_duration': '2.0',
+            'max_record_duration': '60',
+            'buffer_seconds': '120',
+        },
+        'whisper': {'device': 'cuda', 'compute_type': 'float16'},
+        'behavior': {
+            'auto_type': 'true',
+            'beep_on_wake': 'true',
+            'debug_mode': 'false',
+            'tray_enabled': 'true',
+            'typing_mode': 'console',
+            'switch_to_console_phrase': 'switch to console',
+            'switch_to_gui_phrase': 'switch to gui',
+        },
+        'session': {'end_phrase': 'break'},
+    }
+
+    for section, values in defaults.items():
+        config[section] = values
+
+    if os.path.exists(_CONFIG_FILE):
+        config.read(_CONFIG_FILE)
+
+    return config
+
+def _build_punctuation_rules(config):
+    """Build regex patterns from config's spoken_punctuation section."""
+    rules = []
+    if 'spoken_punctuation' not in config:
+        return rules
+
+    # Sort by phrase length descending (longer phrases first)
+    items = list(config['spoken_punctuation'].items())
+    items.sort(key=lambda x: len(x[0]), reverse=True)
+
+    for phrase, replacement in items:
+        # Escape regex special chars in phrase, then wrap with word boundaries
+        escaped = re.escape(phrase)
+        # Build pattern: optional comma, optional space, word boundary, phrase, word boundary, optional punctuation, optional space
+        pattern = r',?\s*\b' + escaped + r'\b[,.]?\s*'
+        # Handle special replacements
+        if replacement == '\\n\\n':
+            replacement = '\n\n'
+        elif replacement == '\\n':
+            replacement = '\n'
+        elif replacement == '\\\\':
+            replacement = '\\\\'
+        # Add spacing based on punctuation type
+        if replacement in '.!?':
+            replacement = replacement + ' '
+        elif replacement in ',;:':
+            replacement = replacement + ' '
+        elif replacement in '([{':
+            replacement = ' ' + replacement
+        elif replacement in ')]}':
+            replacement = replacement + ' '
+        elif replacement in '=-+':
+            replacement = ' ' + replacement + ' '
+        elif replacement == '...':
+            replacement = '... '
+        rules.append((pattern, replacement))
+
+    return rules
+
+def _build_word_replacements(config):
+    """Build word replacement dict from config."""
+    replacements = {}
+    if 'word_replacements' in config:
+        for wrong, correct in config['word_replacements'].items():
+            replacements[wrong] = correct
+    return replacements
+
+# Load configuration
+_config = _load_config()
 
 # Wake word model - custom trained "Hey Atlas"
 WAKE_WORD_MODEL = os.path.join(_BASE_DIR, "models", "openwakeword", "hey_atlas.tflite")
-WAKE_WORD_THRESHOLD = 0.35  # Detection confidence threshold (lower = more sensitive)
+WAKE_WORD_THRESHOLD = _config.getfloat('wake_word', 'threshold')
 
 # Whisper settings
 WHISPER_MODEL = os.path.join(_BASE_DIR, "models", "whisper-large-v3")
-WHISPER_DEVICE = "cuda"
-WHISPER_COMPUTE_TYPE = "float16"
+WHISPER_DEVICE = _config.get('whisper', 'device')
+WHISPER_COMPUTE_TYPE = _config.get('whisper', 'compute_type')
 
 # Audio settings
 SAMPLE_RATE = 16000
 CHUNK_SIZE = 1280  # 80ms chunks for wake word (16000 * 0.08)
-BUFFER_SECONDS = 120  # Keep 2 minutes of audio in buffer
-SILENCE_THRESHOLD = 500  # Amplitude threshold for silence detection
-SILENCE_DURATION = 2.0  # Seconds of silence to stop recording
-MAX_RECORD_DURATION = 60  # Max seconds to record per chunk
+BUFFER_SECONDS = _config.getint('audio', 'buffer_seconds')
+SILENCE_THRESHOLD = _config.getint('audio', 'silence_threshold')
+SILENCE_DURATION = _config.getfloat('audio', 'silence_duration')
+MAX_RECORD_DURATION = _config.getint('audio', 'max_record_duration')
 
 # Session settings
-BREAK_PHRASE = "break break"  # Say this to end session and hit Enter
+END_SESSION_PHRASE = _config.get('session', 'end_phrase')
 
 # Behavior
-AUTO_TYPE = True
-BEEP_ON_WAKE = True
-DEBUG_MODE = False  # Print debug info (set True for troubleshooting)
+AUTO_TYPE = _config.getboolean('behavior', 'auto_type')
+BEEP_ON_WAKE = _config.getboolean('behavior', 'beep_on_wake')
+DEBUG_MODE = _config.getboolean('behavior', 'debug_mode')
+TYPING_MODE = _config.get('behavior', 'typing_mode').lower()  # 'console' or 'gui'
+SWITCH_TO_CONSOLE_PHRASE = _config.get('behavior', 'switch_to_console_phrase').strip()
+SWITCH_TO_GUI_PHRASE = _config.get('behavior', 'switch_to_gui_phrase').strip()
 
 # Tray icon
-TRAY_ENABLED = True  # Set False to disable system tray icon
+TRAY_ENABLED = _config.getboolean('behavior', 'tray_enabled')
 
-# ============================================================================
-# Spoken punctuation & word replacements
-# ============================================================================
-
-# Aggressive punctuation replacement - if you say it, you mean the symbol
-# Order matters: longer phrases first, then single words
-SPOKEN_PUNCTUATION = [
-    # Multi-word phrases first
-    (r',?\s*\bopen parenthesis\b[,.]?\s*', ' ('),
-    (r',?\s*\bclose parenthesis\b[,.]?\s*', ') '),
-    (r',?\s*\bopen paren\b[,.]?\s*', ' ('),
-    (r',?\s*\bclose paren\b[,.]?\s*', ') '),
-    (r',?\s*\bleft paren\b[,.]?\s*', ' ('),
-    (r',?\s*\bright paren\b[,.]?\s*', ') '),
-    (r',?\s*\bopen quote\b[,.]?\s*', ' "'),
-    (r',?\s*\bclose quote\b[,.]?\s*', '" '),
-    (r',?\s*\bend quote\b[,.]?\s*', '" '),
-    (r',?\s*\bopen bracket\b[,.]?\s*', ' ['),
-    (r',?\s*\bclose bracket\b[,.]?\s*', '] '),
-    (r',?\s*\bleft bracket\b[,.]?\s*', ' ['),
-    (r',?\s*\bright bracket\b[,.]?\s*', '] '),
-    (r',?\s*\bopen brace\b[,.]?\s*', ' {'),
-    (r',?\s*\bclose brace\b[,.]?\s*', '} '),
-    (r',?\s*\bexclamation point\b[,.]?\s*', '! '),
-    (r',?\s*\bexclamation mark\b[,.]?\s*', '! '),
-    (r',?\s*\bquestion mark\b[,.]?\s*', '? '),
-    (r',?\s*\bnew paragraph\b[,.]?\s*', '\n\n'),
-    (r',?\s*\bnew line\b[,.]?\s*', '\n'),
-    (r',?\s*\bdot dot dot\b[,.]?\s*', '... '),
-    # Single words - aggressive replacement, no conditions
-    (r',?\s*\bnewline\b[,.]?\s*', '\n'),
-    (r',?\s*\bperiod\b[,.]?\s*', '. '),
-    (r',?\s*\bcomma\b[,.]?\s*', ', '),
-    (r',?\s*\bcolon\b[,.]?\s*', ': '),
-    (r',?\s*\bsemicolon\b[,.]?\s*', '; '),
-    (r',?\s*\bdash\b[,.]?\s*', ' - '),
-    (r',?\s*\bhyphen\b[,.]?\s*', '-'),
-    (r',?\s*\bunquote\b[,.]?\s*', '" '),
-    (r',?\s*\bellipsis\b[,.]?\s*', '... '),
-    (r',?\s*\bapostrophe\b[,.]?\s*', "'"),
-    (r',?\s*\bampersand\b[,.]?\s*', ' & '),
-    (r',?\s*\basterisk\b[,.]?\s*', '*'),
-    (r',?\s*\bat sign\b[,.]?\s*', '@'),
-    (r',?\s*\bhashtag\b[,.]?\s*', '#'),
-    # (r',?\s*\bpercent\b[,.]?\s*', '%'),
-    (r',?\s*\bdollar sign\b[,.]?\s*', '$'),
-    (r',?\s*\bbackslash\b[,.]?\s*', '\\\\'),
-    (r',?\s*\bforward slash\b[,.]?\s*', '/'),
-    (r',?\s*\bslash\b[,.]?\s*', '/'),
-    (r',?\s*\bunderscore\b[,.]?\s*', '_'),
-    (r',?\s*\bequals\b[,.]?\s*', ' = '),
-    (r',?\s*\bplus\b[,.]?\s*', ' + '),
-    (r',?\s*\bminus\b[,.]?\s*', ' - '),
-]
-
-WORD_REPLACEMENTS = {
-    'cloud': 'Claude',
-    'clawed': 'Claude',
-    'claud': 'Claude',
-    'clod': 'Claude',
-    'club': 'Claude',
-    'Cloud': 'Claude',
-    'Clod': 'Claude',
-    'Club': 'Claude',
-    'in gram': 'engram',
-    'In gram': 'engram',
-    'ingram': 'engram',
-    'Ingram': 'engram',
-    'en gram': 'engram',
-    'En gram': 'engram',
-    'end gram': 'engram',
-    'End gram': 'engram',
-    'and gram': 'engram',
-    'And gram': 'engram',
-    'n gram': 'engram',
-    'N gram': 'engram',
-    'pseudo': 'sudo',
-    'Pseudo': 'sudo',
-    'no help': 'nohup',
-    'no hup': 'nohup',
-    'no hub': 'nohup',
-    'no hop': 'nohup',
-    'No help': 'nohup',
-    'No hup': 'nohup',
-    'thank you': '',
-    'Thank you': '',
-    'Thank You': '',
-}
+# Build punctuation and word replacement rules from config
+SPOKEN_PUNCTUATION = _build_punctuation_rules(_config)
+WORD_REPLACEMENTS = _build_word_replacements(_config)
 
 
 def process_text(text):
@@ -345,18 +350,32 @@ class AudioBuffer:
 # Audio Utilities
 # ============================================================================
 
+def play_sound(paths):
+    """Play first available sound from list of paths."""
+    for path in paths:
+        if os.path.exists(path):
+            try:
+                subprocess.run(["paplay", path], capture_output=True, timeout=2)
+                return
+            except:
+                continue
+
 def play_beep():
-    """Play a short beep sound."""
+    """Play wake word activation sound."""
     if not BEEP_ON_WAKE:
         return
-    try:
-        subprocess.run(
-            ["paplay", "/usr/share/sounds/freedesktop/stereo/audio-volume-change.oga"],
-            capture_output=True,
-            timeout=1
-        )
-    except:
-        pass
+    play_sound([
+        "/usr/share/sounds/freedesktop/stereo/audio-volume-change.oga",
+        "/usr/share/sounds/freedesktop/stereo/bell.oga",
+    ])
+
+def play_mode_switch_sound():
+    """Play notification sound for mode switch."""
+    play_sound([
+        "/usr/share/sounds/freedesktop/stereo/bell.oga",
+        "/usr/share/sounds/freedesktop/stereo/dialog-information.oga",
+        "/usr/share/sounds/freedesktop/stereo/complete.oga",
+    ])
 
 
 # ============================================================================
@@ -556,10 +575,10 @@ class Atlas:
 
     def unload_models(self):
         """Unload models and release GPU resources."""
-        if DEBUG_MODE:
-            import traceback
-            print(f"\n[DEBUG] unload_models() called from:")
-            traceback.print_stack(limit=5)
+        # Log who called us for debugging
+        import traceback
+        print(f"\n[DEBUG] unload_models() called from:")
+        traceback.print_stack(limit=5)
 
         if not self.models_loaded:
             print("  Models already unloaded.")
@@ -643,7 +662,19 @@ class Atlas:
         """Type text using xdotool."""
         if not AUTO_TYPE or not text:
             return
-        subprocess.run(["xdotool", "type", "--clearmodifiers", text])
+        if TYPING_MODE == 'gui':
+            # GUI mode: split on newlines and send actual Enter keypresses
+            # (LibreOffice, text editors, etc. need this)
+            parts = text.split('\n')
+            for i, part in enumerate(parts):
+                if part:
+                    subprocess.run(["xdotool", "type", "--clearmodifiers", part])
+                if i < len(parts) - 1:  # Press Enter for each newline
+                    subprocess.run(["xdotool", "key", "Return"])
+        else:
+            # Console mode: type text as-is including \n characters
+            # (terminals, Claude Code, etc. treat Enter as submit)
+            subprocess.run(["xdotool", "type", "--clearmodifiers", text])
 
     def press_enter(self):
         """Press Enter key using xdotool."""
@@ -782,33 +813,32 @@ class Atlas:
         STATUS_INTERVAL = 60  # Log status every 60 seconds (reduced for debugging)
 
         while self.running:
-            # Periodic status logging (only when DEBUG_MODE is enabled)
-            if DEBUG_MODE:
-                now = time.time()
-                if now - last_status_time >= STATUS_INTERVAL and self.audio_buffer:
-                    last_status_time = now
-                    cb_count = self.audio_buffer.callback_count
-                    cb_delta = cb_count - last_callback_count
-                    last_callback_count = cb_count
-                    queue_len = self.audio_buffer.chunks_available()
-                    amp = self.audio_buffer.get_amplitude()
-                    stream_ok = self.audio_buffer.stream is not None and self.audio_buffer.stream.active
-                    state = self.tray.state if self.tray else "NO_TRAY"
+            # Periodic status logging (helps diagnose issues)
+            now = time.time()
+            if now - last_status_time >= STATUS_INTERVAL and self.audio_buffer:
+                last_status_time = now
+                cb_count = self.audio_buffer.callback_count
+                cb_delta = cb_count - last_callback_count
+                last_callback_count = cb_count
+                queue_len = self.audio_buffer.chunks_available()
+                amp = self.audio_buffer.get_amplitude()
+                stream_ok = self.audio_buffer.stream is not None and self.audio_buffer.stream.active
+                state = self.tray.state if self.tray else "NO_TRAY"
 
-                    # Check model state
-                    wake_ok = self.wake_model is not None
-                    whisper_ok = self.whisper_model is not None
-                    models_flag = self.models_loaded
+                # Check model state
+                wake_ok = self.wake_model is not None
+                whisper_ok = self.whisper_model is not None
+                models_flag = self.models_loaded
 
-                    print(f"\n[Status] state={state}, models_loaded={models_flag}, wake_model={wake_ok}, whisper_model={whisper_ok}, audio_ok={stream_ok}, cb_delta={cb_delta}, queue={queue_len}, amp={amp:.0f}")
+                print(f"\n[Status] state={state}, models_loaded={models_flag}, wake_model={wake_ok}, whisper_model={whisper_ok}, audio_ok={stream_ok}, cb_delta={cb_delta}, queue={queue_len}, amp={amp:.0f}")
 
-                    # Sanity check: if tray says ON but models are gone, that's a bug
-                    if state == TrayIcon.STATE_ON and (not wake_ok or not whisper_ok):
-                        print(f"[ERROR] State mismatch! Tray says ON but models missing. wake={wake_ok}, whisper={whisper_ok}")
+                # Sanity check: if tray says ON but models are gone, that's a bug
+                if state == TrayIcon.STATE_ON and (not wake_ok or not whisper_ok):
+                    print(f"[ERROR] State mismatch! Tray says ON but models missing. wake={wake_ok}, whisper={whisper_ok}")
 
-                    # Sanity check: if audio callbacks stopped, stream is dead
-                    if cb_delta == 0 and state == TrayIcon.STATE_ON:
-                        print(f"[ERROR] Audio stream dead! No callbacks in {STATUS_INTERVAL}s")
+                # Sanity check: if audio callbacks stopped, stream is dead
+                if cb_delta == 0 and state == TrayIcon.STATE_ON:
+                    print(f"[ERROR] Audio stream dead! No callbacks in {STATUS_INTERVAL}s")
 
             # Check if disabled (models unloaded)
             if self.tray and self.tray.state == TrayIcon.STATE_DISABLE:
@@ -879,12 +909,34 @@ class Atlas:
                         print("  (silence - still listening...)")
                         continue
 
-                    # Check for break phrase (allow punctuation between words)
-                    # Matches: "break break", "brick break", "Break, brick.", etc.
-                    break_pattern = r'\bbr[ei][ae]k\b'
-                    if re.search(break_pattern, text, re.IGNORECASE):
-                        # Remove break phrase from output
-                        text = re.sub(break_pattern + r'[,.\s]*', '', text, flags=re.IGNORECASE).strip()
+                    # Check for mode switch commands (if configured)
+                    global TYPING_MODE
+                    mode_switched = False
+                    if SWITCH_TO_CONSOLE_PHRASE:
+                        pattern = re.compile(re.escape(SWITCH_TO_CONSOLE_PHRASE) + r'[,.\s]*', re.IGNORECASE)
+                        if pattern.search(text):
+                            TYPING_MODE = 'console'
+                            text = pattern.sub('', text).strip()
+                            print("  [MODE SWITCHED TO CONSOLE]")
+                            mode_switched = True
+                    if SWITCH_TO_GUI_PHRASE:
+                        pattern = re.compile(re.escape(SWITCH_TO_GUI_PHRASE) + r'[,.\s]*', re.IGNORECASE)
+                        if pattern.search(text):
+                            TYPING_MODE = 'gui'
+                            text = pattern.sub('', text).strip()
+                            print("  [MODE SWITCHED TO GUI]")
+                            mode_switched = True
+                    if mode_switched:
+                        play_mode_switch_sound()
+                        if not text:  # Nothing left after removing phrase
+                            continue
+
+                    # Check for end session phrase (configured in settings.conf)
+                    # Fuzzy match for "break" catches Whisper mishearings: brick, brake, etc.
+                    end_session_pattern = r'\bbr[ei][ae]k\b'
+                    if re.search(end_session_pattern, text, re.IGNORECASE):
+                        # Remove end session phrase from output
+                        text = re.sub(end_session_pattern + r'[,.\s]*', '', text, flags=re.IGNORECASE).strip()
                         if text:
                             print(f"  Result: {text}")
                             self.copy_to_clipboard(text)
