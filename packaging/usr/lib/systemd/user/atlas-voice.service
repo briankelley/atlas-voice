@@ -1,0 +1,16 @@
+[Unit]
+Description=Atlas Voice - Always-listening voice dictation
+Documentation=https://github.com/briankelley/atlas-voice
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/lib/atlas-voice/venv/bin/python3 /usr/local/lib/atlas-voice/main.py
+Restart=on-failure
+RestartSec=5
+Environment=DISPLAY=:0
+# Ensure clean quit from tray menu (exit code 0) is not treated as a failure
+SuccessExitStatus=SIGTERM
+
+[Install]
+WantedBy=default.target

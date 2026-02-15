@@ -12,11 +12,18 @@ models/whisper-large-v3/
 
 # Alternative wake word models (keep only hey_atlas.tflite)
 models/openwakeword/hey_atlas.*Acc*.tflite
+models/openwakeword/*.onnx
 
 # Build artifacts
 build/
 *.deb
 dist/
+
+# Backup / scratch files
+*.bak*
+*.pre-refactor
+*.broken-refactor
+*.demo-backup
 
 # IDE
 .idea/
@@ -27,3 +34,9 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Wake word training (separate repo)
+training/
+
+# Claude Code
+.claude/

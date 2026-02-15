@@ -1,28 +1,37 @@
 Package: atlas-voice
-Version: 1.0.2
+Version: 2.0.0
 Section: utils
 Priority: optional
 Architecture: amd64
 Depends: python3, gir1.2-ayatanaappindicator3-0.1, xdotool, xclip, libnotify-bin, pulseaudio-utils, wget
 Installed-Size: 2560000
 Maintainer: Brian Kelley <briankelley@users.noreply.github.com>
-Description: Always-listening voice dictation with wake word detection
+Description: Always-listening voice dictation with modular state machine architecture
  Atlas Voice provides hands-free voice dictation using OpenWakeWord
  for wake word detection and OpenAI Whisper for transcription.
  .
  Say "Hey Atlas" to activate, dictate your text, and say "break"
  to finish. Text is automatically typed into the focused application.
  .
+ v2.0.0 is a complete architectural rewrite — the monolithic atlas.py
+ has been replaced with 14 focused modules built around a finite state
+ machine with thread-safe mailbox IPC.
+ .
  Features:
   - Custom trained "Hey Atlas" wake word
   - GPU-accelerated Whisper large-v3 transcription
+  - 5-state finite state machine (disabled/paused/listening/recording/transcribing)
+  - Continuous dictation with overlapping speech detection
+  - Console & GUI typing modes (switchable by voice command)
+  - Terminal safety — clipboard paste instead of typing in terminals
   - System tray icon with pause/resume/disable controls
-  - Automatic silence detection
-  - Spoken punctuation support
+  - Audio health monitoring with auto-restart
+  - Spoken punctuation support (45+ configurable rules)
+  - External settings.conf for all configuration
  .
  System requirements:
   - NVIDIA GPU with 4GB+ VRAM (CUDA acceleration)
-  - ~4GB disk space (installed) + ~3GB for Whisper model (auto-downloaded)
+  - ~6GB disk space (2.5GB venv + 3GB Whisper model)
   - Working microphone
   - Desktop environment with system tray support
  .
