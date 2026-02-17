@@ -67,9 +67,12 @@ def output_text(text, ctx):
     window_class = _get_cached_window_class()
     log_debug(f"[OUTPUT] Target window: {window_class}")
 
+    # Always copy to clipboard first (unified clipboard content)
+    copy_to_clipboard(text)
+
     if _is_terminal(window_class):
         log_info("[OUTPUT] Terminal detected, copying to clipboard (not typing)")
-        copy_to_clipboard(text)
+        # Already copied above
         return
 
     typing_mode = ctx.typing_mode

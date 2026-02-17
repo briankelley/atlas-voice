@@ -38,6 +38,15 @@ class AtlasContext:
         self.tray_running = False
         self._pending_icon = None   # Last icon requested (for startup race)
 
+    def clear_interstate_data(self):
+        """Reset all inter-state data fields to None.
+
+        Call at state entry and on error-return paths to prevent stale data.
+        """
+        self.wake_time = None
+        self.captured_audio = None
+        self.recording_mode = None
+
     def set_icon(self, icon_name):
         """Tell GTK thread to display this icon. Called from worker thread."""
         log_debug(f"[ICON] Setting: {icon_name}")

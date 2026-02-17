@@ -27,6 +27,7 @@ def state_recording(ctx):
     # Validate inter-state data
     if ctx.recording_mode == "wake" and ctx.wake_time is None:
         log_error("[STATE] Entered recording in wake mode with no wake_time, returning to listening")
+        ctx.clear_interstate_data()
         return "listening"
 
     # Clear output data
@@ -118,12 +119,14 @@ def state_recording(ctx):
             last_health_check = now
             if not ctx.audio_buffer.is_healthy():
                 log_error("[AUDIO] Stream unhealthy during recording, attempting restart")
-                try:
-                    ctx.audio_buffer.restart()
-                except Exception as e:
-                    log_error(f"[AUDIO] Restart failed during recording: {e}")
-                    ctx.unload_models()
-                    return "disabled"
+                if not ctx.audio_buffer.restart():
+                    if ctx.audio_buffer.device_name:
+                        log_info("[STATE] Exiting: recording -> listening (device recovery)")
+                        return "listening"
+                    else:
+                        log_error("[AUDIO] Restart failed during recording")
+                        ctx.unload_models()
+                        return "disabled"
 
         # Check mailbox every iteration
         req = ctx.mailbox.check()

@@ -22,12 +22,23 @@ def state_disabled(ctx):
         if req == Mailbox.TOGGLE_ENABLE:
             log_info("[STATE] Enabling (loading models)...")
             try:
+                # Check device presence before loading models to avoid
+                # wasting GPU memory if the device is unavailable
+                if ctx.audio_buffer.device_name and not ctx.audio_buffer.is_device_present():
+                    log_error(f"[STATE] Audio device '{ctx.audio_buffer.device_name}' not found, staying disabled")
+                    continue
+
                 ctx.load_models()
+
                 # Start audio stream if not running
                 try:
                     ctx.audio_buffer.start()
-                except Exception:
-                    pass  # May already be started
+                except Exception as e:
+                    log_error(f"[STATE] Audio start failed after model load: {e}")
+                    # Unload models to free GPU since we can't proceed
+                    ctx.unload_models()
+                    continue
+
                 log_info("[STATE] Exiting: disabled -> listening")
                 return "listening"
             except Exception as e:

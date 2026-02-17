@@ -22,6 +22,7 @@ def load_config():
             'max_record_duration': '60',
             'buffer_seconds': '120',
             'vad_timeout': '5.0',
+            'device': '',
         },
         'whisper': {'device': 'cuda', 'compute_type': 'float16'},
         'behavior': {
@@ -60,6 +61,7 @@ def load_config():
         'max_record_duration': config.getint('audio', 'max_record_duration'),
         'buffer_seconds': config.getint('audio', 'buffer_seconds'),
         'vad_timeout': config.getfloat('audio', 'vad_timeout'),
+        'audio_device': config.get('audio', 'device').strip(),
 
         # Whisper
         'whisper_device': config.get('whisper', 'device'),

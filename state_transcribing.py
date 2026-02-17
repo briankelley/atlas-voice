@@ -32,6 +32,7 @@ def state_transcribing(ctx):
     # Validate
     if ctx.captured_audio is None or len(ctx.captured_audio) == 0:
         log_error("[STATE] Entered transcribing with no audio, returning to listening")
+        ctx.clear_interstate_data()
         return "listening"
 
     # Pre-transcription mailbox check
@@ -40,11 +41,11 @@ def state_transcribing(ctx):
         return handle_quit(ctx)
     elif req == Mailbox.TOGGLE_PAUSE:
         log_info("[STATE] Pre-transcription pause, discarding audio")
-        ctx.captured_audio = None
+        ctx.clear_interstate_data()
         return "paused"
     elif req == Mailbox.TOGGLE_ENABLE:
         log_info("[STATE] Pre-transcription disable, discarding audio")
-        ctx.captured_audio = None
+        ctx.clear_interstate_data()
         ctx.unload_models()
         try:
             ctx.audio_buffer.stop()
@@ -66,17 +67,24 @@ def state_transcribing(ctx):
     # Audio health check before transcription
     if not ctx.audio_buffer.is_healthy():
         log_error("[AUDIO] Stream unhealthy before transcription, attempting restart")
-        try:
-            ctx.audio_buffer.restart()
-        except Exception as e:
-            log_error(f"[AUDIO] Restart failed: {e}")
-            ctx.captured_audio = None
-            ctx.unload_models()
-            try:
-                os.unlink(temp_path)
-            except Exception:
-                pass
-            return "disabled"
+        if not ctx.audio_buffer.restart():
+            if ctx.audio_buffer.device_name:
+                ctx.clear_interstate_data()
+                try:
+                    os.unlink(temp_path)
+                except Exception:
+                    pass
+                log_info("[STATE] Exiting: transcribing -> listening (device recovery)")
+                return "listening"
+            else:
+                log_error("[AUDIO] Restart failed")
+                ctx.clear_interstate_data()
+                ctx.unload_models()
+                try:
+                    os.unlink(temp_path)
+                except Exception:
+                    pass
+                return "disabled"
 
     text = ""
     try:
@@ -104,7 +112,7 @@ def state_transcribing(ctx):
                 log_info(f"[TRANSCRIBE] Complete in {duration:.1f}s, {len(text)} chars")
         except Exception as e:
             log_error(f"[TRANSCRIBE] Failed: {e}")
-            ctx.captured_audio = None
+            ctx.clear_interstate_data()
             return "listening"
 
     finally:
@@ -121,12 +129,14 @@ def state_transcribing(ctx):
     # Audio health check after transcription
     if not ctx.audio_buffer.is_healthy():
         log_error("[AUDIO] Stream unhealthy after transcription, attempting restart")
-        try:
-            ctx.audio_buffer.restart()
-        except Exception as e:
-            log_error(f"[AUDIO] Restart failed: {e}")
-            ctx.unload_models()
-            return "disabled"
+        if not ctx.audio_buffer.restart():
+            if ctx.audio_buffer.device_name:
+                log_info("[STATE] Exiting: transcribing -> listening (device recovery)")
+                return "listening"
+            else:
+                log_error("[AUDIO] Restart failed")
+                ctx.unload_models()
+                return "disabled"
 
     # Handle empty transcription
     if not text or not text.strip():
@@ -173,7 +183,6 @@ def state_transcribing(ctx):
         remaining = remove_break_keyword(text, ctx.config)
         if remaining:
             log_info(f"  Result: {remaining}")
-            copy_to_clipboard(remaining)
             output_text(remaining, ctx)
         log_info("  [SESSION END - pressing Enter]")
         ctx.play_beep()
@@ -183,8 +192,7 @@ def state_transcribing(ctx):
 
     # Normal output
     log_info(f"  Result: {text}")
-    copy_to_clipboard(text)
-    output_text(text + " ", ctx)  # Trailing space for continuous dictation
+    output_text(text + " ", ctx)  # Trailing space for continuous dictation; output_text handles clipboard
 
     # Check for overlapping speech (continuous dictation)
     overlap_start = ctx.audio_buffer.detect_speech_during(start_time, transcription_end)

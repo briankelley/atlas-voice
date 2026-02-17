@@ -47,7 +47,16 @@ from state_recording import state_recording
 from state_transcribing import state_transcribing
 
 
-# State dispatch table
+# State dispatch table.
+#
+# Architecture invariants:
+# - Single worker thread serializes all state transitions (no ordering races).
+# - Mailbox isolates GTK main thread from worker thread (post/check/wait).
+# - AudioBuffer queues and locks protect audio data flow from callback thread.
+# - ctx shared state is single-writer (worker thread), except audio_buffer
+#   fields written by the callback thread (protected by locks/queues).
+# - All audio failure recovery routes through "listening" state.
+# - "disabled" state means models unloaded, GPU free.
 STATES = {
     "disabled": state_disabled,
     "paused": state_paused,
