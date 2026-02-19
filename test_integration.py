@@ -19,6 +19,7 @@ def _make_config(**overrides):
         'silence_threshold': 500,
         'buffer_seconds': 10,
         'audio_device': '',
+        'wake_preroll': 0.75,
         'wake_word_model': '/dev/null',
         'whisper_model': '/dev/null',
         'whisper_device': 'cpu',
@@ -96,7 +97,7 @@ class TestStateListeningToRecording(unittest.TestCase):
         # Prevent flush_chunk_queue from discarding our test chunk
         buf.flush_chunk_queue = mock.MagicMock()
         chunk = np.zeros(1280, dtype=np.int16)
-        buf.chunk_queue.put(chunk)
+        buf.chunk_queue.put((1000.0, chunk))
 
         # Import here to use patched time
         from state_listening import state_listening
@@ -104,12 +105,67 @@ class TestStateListeningToRecording(unittest.TestCase):
 
         self.assertEqual(result, "recording")
         self.assertEqual(ctx.recording_mode, "wake")
-        self.assertIsNotNone(ctx.wake_time)
+
+        # Intermediate check: last_dequeued_ts was set by get_chunk()
+        self.assertEqual(buf.last_dequeued_ts, 1000.0)
+
+        # wake_time = audio_ts (1000.0) - preroll (0.75) = 999.25
+        self.assertAlmostEqual(ctx.wake_time, 999.25, places=2)
 
         # Verify predict was called with int16 data (openwakeword requirement)
         mock_wake.predict.assert_called_once()
         call_arg = mock_wake.predict.call_args[0][0]
         self.assertEqual(call_arg.dtype, np.int16)
+
+
+class TestEndToEndPrerollAudio(unittest.TestCase):
+    """End-to-end: wake detection -> get_audio_since(wake_time) returns preroll audio."""
+
+    def test_wake_preroll_retrieves_ring_buffer_audio(self):
+        """After wake detection, get_audio_since(wake_time) returns expected preroll audio."""
+        config = _make_config()
+        buf = AudioBuffer(config)
+        ctx = AtlasContext(config, buf)
+        ctx.mailbox = Mailbox()
+
+        # Seed ring buffer with timestamped audio chunks spanning 2 seconds
+        # Chunks at 80ms intervals: timestamps 998.0, 998.08, ..., 999.92
+        chunks_in_ring = []
+        for i in range(25):
+            ts = 998.0 + i * 0.08
+            chunk = np.full(1280, i + 1, dtype=np.int16)  # non-zero audio
+            buf.ring_buffer.append((ts, chunk.copy()))
+            chunks_in_ring.append((ts, chunk))
+
+        # Put one chunk in the wake word queue with timestamp matching
+        # the last ring buffer entry (simulating the chunk that triggered wake)
+        wake_chunk_ts = 999.92
+        wake_chunk = np.full(1280, 99, dtype=np.int16)
+        buf.chunk_queue.put((wake_chunk_ts, wake_chunk))
+
+        # Simulate wake_time calculation: audio_ts - preroll
+        # audio_ts = 999.92 (from last_dequeued_ts after get_chunk)
+        # wake_time = 999.92 - 0.75 = 999.17
+        result_chunk = buf.get_chunk()
+        self.assertIsNotNone(result_chunk)
+        self.assertEqual(buf.last_dequeued_ts, wake_chunk_ts)
+
+        wake_time = buf.last_dequeued_ts - config['wake_preroll']
+        self.assertAlmostEqual(wake_time, 999.17, places=2)
+
+        # get_audio_since should return chunks from the ring buffer
+        audio = buf.get_audio_since(wake_time)
+        self.assertGreater(len(audio), 0)
+
+        # Should include chunks from ~999.20 onward (timestamps >= 999.17)
+        # That's roughly the last 9-10 chunks of our 25
+        expected_chunks = [c for ts, c in chunks_in_ring if ts >= wake_time]
+        self.assertGreater(len(expected_chunks), 0)
+        expected_samples = sum(len(c) for c in expected_chunks)
+        self.assertEqual(len(audio), expected_samples)
+
+        # Verify the ring buffer still has audio since wake_time
+        self.assertTrue(buf.has_audio_since(wake_time))
 
 
 if __name__ == '__main__':

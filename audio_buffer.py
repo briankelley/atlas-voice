@@ -48,6 +48,16 @@ class AudioBuffer:
         self.last_callback_time = None
         self.current_amplitude = 0
 
+        # Capture timestamp of the most recently dequeued chunk (via get_chunk).
+        # Only meaningful immediately after get_chunk() in the listening state —
+        # subsequent get_chunk() calls in other states will overwrite it.
+        # Thread safety: only safe when get_chunk() and reads happen on the
+        # single state-machine thread. Needs a lock if multi-threaded consumers
+        # are introduced. This is a minimal-diff side-effect attribute; preferred
+        # long-term refactor: return (ts, chunk) from get_chunk() and update all
+        # callers.
+        self.last_dequeued_ts = None
+
         # Error tracking (sliding window for disconnect detection)
         self._error_count_window = []       # list of error timestamps
         self._error_window_seconds = 5.0    # time window for error rate calculation
@@ -231,9 +241,14 @@ class AudioBuffer:
         return True
 
     def get_chunk(self, timeout=0.08):
-        """Get next chunk from queue for wake word processing."""
+        """Get next chunk from queue for wake word processing.
+
+        Stores the chunk's capture timestamp in self.last_dequeued_ts.
+        """
         try:
-            return self.chunk_queue.get(timeout=timeout)
+            timestamp, chunk = self.chunk_queue.get(timeout=timeout)
+            self.last_dequeued_ts = timestamp
+            return chunk
         except queue.Empty:
             return None
 
@@ -242,10 +257,11 @@ class AudioBuffer:
         count = 0
         try:
             while True:
-                self.chunk_queue.get_nowait()
+                self.chunk_queue.get_nowait()  # discards tuples without unpacking
                 count += 1
         except queue.Empty:
             pass
+        self.last_dequeued_ts = None
         if count > 0:
             log_debug(f"[AUDIO] Chunk queue flushed ({count} chunks)")
 
@@ -334,15 +350,15 @@ class AudioBuffer:
             with self._lock:
                 self.ring_buffer.append((timestamp, chunk.copy()))
 
-            # Enqueue chunk for wake word processing (overflow: discard oldest)
+            # Enqueue (timestamp, chunk) for wake word processing (overflow: discard oldest)
             try:
-                self.chunk_queue.put_nowait(chunk.copy())
+                self.chunk_queue.put_nowait((timestamp, chunk.copy()))
             except queue.Full:
                 try:
-                    self.chunk_queue.get_nowait()  # discard oldest
+                    self.chunk_queue.get_nowait()  # discard oldest tuple
                 except queue.Empty:
                     pass
-                self.chunk_queue.put_nowait(chunk.copy())
+                self.chunk_queue.put_nowait((timestamp, chunk.copy()))
 
         except Exception as e:
             # Treat callback exceptions as disconnect signal

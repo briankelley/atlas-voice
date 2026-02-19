@@ -149,25 +149,26 @@ class TestQueueOverflow(unittest.TestCase):
         cfg = _make_config()
         buf = AudioBuffer(cfg)
 
-        # Fill queue to capacity (maxsize=100)
+        # Fill queue to capacity (maxsize=100) with (timestamp, value) tuples
         for i in range(100):
-            buf.chunk_queue.put_nowait(i)
+            buf.chunk_queue.put_nowait((float(i), i))
         self.assertEqual(buf.chunk_queue.qsize(), 100)
 
-        # Simulate the callback overflow logic: drop oldest, then put new
+        # Simulate the callback overflow logic: drop oldest tuple, then put new
         newest = 999
         try:
-            buf.chunk_queue.put_nowait(newest)
+            buf.chunk_queue.put_nowait((float(newest), newest))
         except queue.Full:
-            buf.chunk_queue.get_nowait()   # discard oldest
-            buf.chunk_queue.put_nowait(newest)
+            buf.chunk_queue.get_nowait()   # discard oldest tuple
+            buf.chunk_queue.put_nowait((float(newest), newest))
 
         self.assertEqual(buf.chunk_queue.qsize(), 100)
 
         # Drain the queue and verify the newest item is present
         items = []
         while not buf.chunk_queue.empty():
-            items.append(buf.chunk_queue.get_nowait())
+            ts, val = buf.chunk_queue.get_nowait()
+            items.append(val)
         self.assertIn(newest, items)
         # The very first item (0) should have been dropped
         self.assertNotIn(0, items)
@@ -207,6 +208,91 @@ class TestStartAndRestart(unittest.TestCase):
 
         result = buf.restart()
         self.assertFalse(result)
+
+
+class TestGetChunkTimestamp(unittest.TestCase):
+    """Tests for get_chunk() timestamp storage via last_dequeued_ts."""
+
+    def _make_buffer(self):
+        cfg = _make_config()
+        return AudioBuffer(cfg)
+
+    def test_get_chunk_returns_chunk_and_stores_timestamp(self):
+        """get_chunk() unpacks (ts, chunk), returns chunk, stores ts."""
+        import numpy as np
+        buf = self._make_buffer()
+        chunk = np.zeros(1280, dtype=np.int16)
+        ts = 12345.678
+        buf.chunk_queue.put_nowait((ts, chunk))
+
+        result = buf.get_chunk()
+        self.assertIsNotNone(result)
+        self.assertEqual(result.dtype, np.int16)
+        self.assertEqual(len(result), 1280)
+        self.assertEqual(buf.last_dequeued_ts, ts)
+
+    def test_get_chunk_returns_none_on_empty(self):
+        """get_chunk() returns None on empty queue, last_dequeued_ts unchanged."""
+        buf = self._make_buffer()
+        buf.last_dequeued_ts = 99999.0  # pre-set
+
+        result = buf.get_chunk(timeout=0.01)
+        self.assertIsNone(result)
+        self.assertEqual(buf.last_dequeued_ts, 99999.0)
+
+    def test_flush_resets_last_dequeued_ts(self):
+        """flush_chunk_queue() sets last_dequeued_ts to None."""
+        import numpy as np
+        buf = self._make_buffer()
+        chunk = np.zeros(1280, dtype=np.int16)
+        buf.chunk_queue.put_nowait((1000.0, chunk))
+        buf.get_chunk()
+        self.assertEqual(buf.last_dequeued_ts, 1000.0)
+
+        buf.flush_chunk_queue()
+        self.assertIsNone(buf.last_dequeued_ts)
+
+
+class TestOverflowTupleHandling(unittest.TestCase):
+    """Tests that overflow path correctly handles (timestamp, chunk) tuples."""
+
+    def test_overflow_preserves_tuple_contract(self):
+        """After overflow, get_chunk() returns bare chunk with correct timestamp."""
+        import numpy as np
+        cfg = _make_config()
+        buf = AudioBuffer(cfg)
+
+        # Fill queue to capacity with tuples
+        for i in range(100):
+            chunk = np.full(1280, i, dtype=np.int16)
+            buf.chunk_queue.put_nowait((float(i), chunk))
+        self.assertEqual(buf.chunk_queue.qsize(), 100)
+
+        # Trigger overflow with a new tuple
+        new_ts = 999.0
+        new_chunk = np.full(1280, 42, dtype=np.int16)
+        try:
+            buf.chunk_queue.put_nowait((new_ts, new_chunk))
+        except queue.Full:
+            buf.chunk_queue.get_nowait()  # discard oldest tuple
+            buf.chunk_queue.put_nowait((new_ts, new_chunk))
+
+        # Drain via get_chunk() — should return bare chunks, not tuples
+        chunks = []
+        timestamps = []
+        while True:
+            c = buf.get_chunk(timeout=0.01)
+            if c is None:
+                break
+            chunks.append(c)
+            timestamps.append(buf.last_dequeued_ts)
+
+        # All returned items should be numpy arrays, not tuples
+        for c in chunks:
+            self.assertEqual(c.dtype, np.int16)
+
+        # Last dequeued timestamp should be our overflow item's timestamp
+        self.assertEqual(timestamps[-1], new_ts)
 
 
 if __name__ == '__main__':

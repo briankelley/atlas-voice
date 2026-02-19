@@ -161,6 +161,7 @@ def state_listening(ctx):
         now = time.time()
         if now - last_health_check >= HEALTH_CHECK_INTERVAL:
             last_health_check = now
+            log_debug(f"[AUDIO] Health check: queue_depth={ctx.audio_buffer.chunk_queue.qsize()}")
             if not ctx.audio_buffer.is_healthy():
                 log_error("[AUDIO] Stream unhealthy, attempting restart")
                 if ctx.audio_buffer.restart():
@@ -196,7 +197,15 @@ def state_listening(ctx):
                 for model_name, scores in ctx.wake_model.prediction_buffer.items():
                     if len(scores) > 0 and scores[-1] > ctx.config['wake_word_threshold']:
                         log_info(f"[WAKE] Detected! model={model_name}, score={scores[-1]:.4f}")
-                        ctx.wake_time = time.time()
+                        # Queue lag means processing time > capture time. Use the
+                        # dequeued chunk's capture timestamp minus configurable
+                        # preroll so that state_recording.get_audio_since() retrieves
+                        # pre-wake/early-command audio from the ring buffer.
+                        audio_ts = ctx.audio_buffer.last_dequeued_ts
+                        if audio_ts is None:
+                            log_error("[WAKE] last_dequeued_ts was None at wake detection, using wall clock")
+                            audio_ts = time.time()
+                        ctx.wake_time = audio_ts - ctx.config['wake_preroll']
                         ctx.recording_mode = "wake"
                         log_info("[STATE] Exiting: listening -> recording")
                         return "recording"
