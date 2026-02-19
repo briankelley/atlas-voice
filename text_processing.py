@@ -5,14 +5,26 @@ from logging_utils import log_debug
 
 
 def strip_wake_phrase(text, config):
-    """Remove the wake phrase from the beginning of transcribed text."""
+    """Remove the wake phrase from the beginning of transcribed text.
+
+    Whisper may transcribe the full phrase ("Hey Atlas") or only part of it
+    ("Atlas"), so leading words are made optional. For "hey atlas", the pattern
+    matches "Hey Atlas", "Hey, Atlas", or just "Atlas" at the start.
+    """
     wake_phrase = config.get('wake_phrase', '')
     if not wake_phrase:
         return text
-    pattern = r'^' + re.escape(wake_phrase) + r'[,.\s]*'
+    words = wake_phrase.split()
+    if len(words) > 1:
+        # Make all words except the last optional: (hey[,.\s]+)?atlas
+        optional = r'[,.\s]+'.join(re.escape(w) for w in words[:-1])
+        last = re.escape(words[-1])
+        pattern = r'^(' + optional + r'[,.\s]+)?' + last + r'[,.\s]*'
+    else:
+        pattern = r'^' + re.escape(words[0]) + r'[,.\s]*'
     result = re.sub(pattern, '', text, count=1, flags=re.IGNORECASE)
     if result != text:
-        log_debug(f"[TEXT] Stripped wake phrase '{wake_phrase}' from transcription")
+        log_debug(f"[TEXT] Stripped wake phrase from transcription")
     return result.strip()
 
 
