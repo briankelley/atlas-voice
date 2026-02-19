@@ -15,7 +15,7 @@ def load_config():
 
     # Defaults
     defaults = {
-        'wake_word': {'threshold': '0.35'},
+        'wake_word': {'threshold': '0.50', 'wake_preroll': '0.75', 'wake_phrase': 'hey atlas'},
         'audio': {
             'silence_threshold': '500',
             'silence_duration': '2.0',
@@ -52,6 +52,8 @@ def load_config():
 
         # Wake word
         'wake_word_threshold': config.getfloat('wake_word', 'threshold'),
+        'wake_preroll': config.getfloat('wake_word', 'wake_preroll'),
+        'wake_phrase': config.get('wake_word', 'wake_phrase').strip(),
 
         # Audio
         'sample_rate': 16000,

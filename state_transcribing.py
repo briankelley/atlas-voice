@@ -10,7 +10,7 @@ import numpy as np
 from logging_utils import log_debug, log_info, log_error, should_log_transcripts
 from mailbox import Mailbox
 from context import handle_quit
-from text_processing import process_text, contains_break_keyword, remove_break_keyword
+from text_processing import process_text, contains_break_keyword, remove_break_keyword, strip_wake_phrase
 from text_output import output_text, copy_to_clipboard, press_enter
 
 
@@ -137,6 +137,9 @@ def state_transcribing(ctx):
                 log_error("[AUDIO] Restart failed")
                 ctx.unload_models()
                 return "disabled"
+
+    # Strip wake phrase from transcription (preroll captures "Hey Atlas" in the audio)
+    text = strip_wake_phrase(text, ctx.config)
 
     # Handle empty transcription
     if not text or not text.strip():

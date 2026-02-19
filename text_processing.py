@@ -4,6 +4,18 @@ import re
 from logging_utils import log_debug
 
 
+def strip_wake_phrase(text, config):
+    """Remove the wake phrase from the beginning of transcribed text."""
+    wake_phrase = config.get('wake_phrase', '')
+    if not wake_phrase:
+        return text
+    pattern = r'^' + re.escape(wake_phrase) + r'[,.\s]*'
+    result = re.sub(pattern, '', text, count=1, flags=re.IGNORECASE)
+    if result != text:
+        log_debug(f"[TEXT] Stripped wake phrase '{wake_phrase}' from transcription")
+    return result.strip()
+
+
 def process_text(text, config):
     """Apply punctuation conversion and word replacements from config."""
     # Apply spoken punctuation rules (from config, pre-built as (pattern_str, replacement) tuples)
