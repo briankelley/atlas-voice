@@ -34,7 +34,7 @@ https://github.com/user-attachments/assets/85c22beb-d879-4396-8d40-bf280f060007
 Download the latest `.deb` from [Releases](https://github.com/briankelley/atlas-voice/releases) and install:
 
 ```bash
-sudo apt install ./atlas-voice_2.0.0.deb
+sudo apt install ./atlas-voice_2.1.1.deb
 ```
 
 The installer will:
