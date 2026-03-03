@@ -6,7 +6,7 @@ https://github.com/user-attachments/assets/85c22beb-d879-4396-8d40-bf280f060007
 
 ## Features
 
-- **Wake word activation** — custom-trained "Hey Atlas" model, hands-free triggering
+- **Wake word activation** — custom-trained "Hey Atlas" model, hands-free triggering. [Train your own custom word or phrase](https://github.com/briankelley/atlas-voice-training).
 - **GPU-accelerated transcription** — Whisper large-v3 via faster-whisper on CUDA
 - **Continuous dictation** — keeps recording after each transcription without re-triggering the wake word; detects overlapping speech and seamlessly chains utterances
 - **Spoken punctuation** — say "period", "comma", "new paragraph", "open paren", etc. (45+ rules, all configurable)
@@ -38,6 +38,7 @@ sudo apt install ./atlas-voice_2.0.0.deb
 ```
 
 The installer will:
+
 1. Set up a Python virtual environment with all dependencies (including CUDA runtime)
 2. Download the Whisper large-v3 model (~3GB) from huggingface.co
 3. Enable and start a systemd user service
@@ -71,25 +72,25 @@ python main.py
 
 ## Usage
 
-| Action | How |
-|--------|-----|
-| Start dictating | Say **"Hey Atlas"** |
-| End session | Say **"break"** (types remaining text, presses Enter) |
-| Pause / Resume | Tray menu → Pause / Resume |
-| Unload GPU | Tray menu → Enable / Disable (GPU) |
-| Quit | Tray menu → Quit Atlas |
-| Switch typing mode | Say **"switch to console"** or **"switch to gui"** |
+| Action             | How                                                   |
+| ------------------ | ----------------------------------------------------- |
+| Start dictating    | Say **"Hey Atlas"**                                   |
+| End session        | Say **"break"** (types remaining text, presses Enter) |
+| Pause / Resume     | Tray menu → Pause / Resume                            |
+| Unload GPU         | Tray menu → Enable / Disable (GPU)                    |
+| Quit               | Tray menu → Quit Atlas                                |
+| Switch typing mode | Say **"switch to console"** or **"switch to gui"**    |
 
 ### Continuous Dictation
 
-After your first utterance is transcribed, Atlas stays in recording mode — just keep talking. Each pause triggers a transcription and the result is typed out, then Atlas immediately listens for more. Say **"break"** when you're done to end the session and press Enter.
+After your first utterance is transcribed, Atlas stays in recording mode — just keep talking. Each pause triggers a transcription and the result is typed out, then Atlas immediately listens for more. Say **"break"** when you're done to end the session and press Enter. (Initially developed to use inside console sessions where "enter" was an expected key press.)
 
 ### Typing Modes
 
-| Mode | Newlines sent as | Best for |
-|------|-----------------|----------|
-| `console` (default) | `\n` character | Terminals, CLI tools, chat apps |
-| `gui` | Enter keypress | LibreOffice, text editors, form fields |
+| Mode                | Newlines sent as | Best for                               |
+| ------------------- | ---------------- | -------------------------------------- |
+| `console` (default) | `\n` character   | Terminals, CLI tools, chat apps        |
+| `gui`               | Enter keypress   | LibreOffice, text editors, form fields |
 
 Switch modes on the fly by saying "switch to console" or "switch to gui", or set the default in `settings.conf`.
 
@@ -97,23 +98,23 @@ Switch modes on the fly by saying "switch to console" or "switch to gui", or set
 
 All rules are configurable in `settings.conf` under `[spoken_punctuation]`. Defaults include:
 
-| Say | Types | | Say | Types |
-|-----|-------|-|-----|-------|
-| "period" | `.` | | "open paren" | `(` |
-| "comma" | `,` | | "close paren" | `)` |
-| "question mark" | `?` | | "open bracket" | `[` |
-| "exclamation point" | `!` | | "close bracket" | `]` |
-| "colon" | `:` | | "open brace" | `{` |
-| "semicolon" | `;` | | "close brace" | `}` |
-| "dash" | `-` | | "open quote" | `"` |
-| "new line" | newline | | "close quote" | `"` |
-| "new paragraph" | double newline | | "apostrophe" | `'` |
-| "ellipsis" | `...` | | "ampersand" | `&` |
-| "underscore" | `_` | | "asterisk" | `*` |
-| "at sign" | `@` | | "hashtag" | `#` |
-| "forward slash" | `/` | | "backslash" | `\` |
-| "equals" | `=` | | "plus" | `+` |
-| "dollar sign" | `$` | | | |
+| Say                 | Types          |     | Say             | Types |
+| ------------------- | -------------- | --- | --------------- | ----- |
+| "period"            | `.`            |     | "open paren"    | `(`   |
+| "comma"             | `,`            |     | "close paren"   | `)`   |
+| "question mark"     | `?`            |     | "open bracket"  | `[`   |
+| "exclamation point" | `!`            |     | "close bracket" | `]`   |
+| "colon"             | `:`            |     | "open brace"    | `{`   |
+| "semicolon"         | `;`            |     | "close brace"   | `}`   |
+| "dash"              | `-`            |     | "open quote"    | `"`   |
+| "new line"          | newline        |     | "close quote"   | `"`   |
+| "new paragraph"     | double newline |     | "apostrophe"    | `'`   |
+| "ellipsis"          | `...`          |     | "ampersand"     | `&`   |
+| "underscore"        | `_`            |     | "asterisk"      | `*`   |
+| "at sign"           | `@`            |     | "hashtag"       | `#`   |
+| "forward slash"     | `/`            |     | "backslash"     | `\`   |
+| "equals"            | `=`            |     | "plus"          | `+`   |
+| "dollar sign"       | `$`            |     |                 |       |
 
 ## Configuration
 
@@ -245,22 +246,22 @@ period = .
 
 ### Module Map
 
-| Module | Responsibility |
-|--------|---------------|
-| `main.py` | Entry point, signal handling, GTK main loop, state dispatch |
-| `config.py` | Load and parse `settings.conf` with typed defaults |
-| `context.py` | Shared state container, model load/unload, GPU memory cleanup |
-| `mailbox.py` | Thread-safe request passing between GTK and worker threads |
-| `audio_buffer.py` | Continuous audio capture, ring buffer, chunk queue |
-| `tray.py` | System tray icon — renders icons, posts user actions to mailbox |
-| `logging_utils.py` | Timestamped debug/info/error logging |
-| `text_processing.py` | Spoken punctuation and word replacement pipeline |
-| `text_output.py` | xdotool typing, xclip clipboard, terminal detection |
-| `state_disabled.py` | Models unloaded, GPU free — waits for enable |
-| `state_paused.py` | Models loaded, not listening — waits for resume |
-| `state_listening.py` | Wake word detection loop with audio health checks |
-| `state_recording.py` | Audio capture with silence detection and VAD mode |
-| `state_transcribing.py` | Whisper inference, text output, continuous dictation |
+| Module                  | Responsibility                                                  |
+| ----------------------- | --------------------------------------------------------------- |
+| `main.py`               | Entry point, signal handling, GTK main loop, state dispatch     |
+| `config.py`             | Load and parse `settings.conf` with typed defaults              |
+| `context.py`            | Shared state container, model load/unload, GPU memory cleanup   |
+| `mailbox.py`            | Thread-safe request passing between GTK and worker threads      |
+| `audio_buffer.py`       | Continuous audio capture, ring buffer, chunk queue              |
+| `tray.py`               | System tray icon — renders icons, posts user actions to mailbox |
+| `logging_utils.py`      | Timestamped debug/info/error logging                            |
+| `text_processing.py`    | Spoken punctuation and word replacement pipeline                |
+| `text_output.py`        | xdotool typing, xclip clipboard, terminal detection             |
+| `state_disabled.py`     | Models unloaded, GPU free — waits for enable                    |
+| `state_paused.py`       | Models loaded, not listening — waits for resume                 |
+| `state_listening.py`    | Wake word detection loop with audio health checks               |
+| `state_recording.py`    | Audio capture with silence detection and VAD mode               |
+| `state_transcribing.py` | Whisper inference, text output, continuous dictation            |
 
 ## Training Your Own Wake Word
 
