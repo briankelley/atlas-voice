@@ -256,8 +256,3 @@
 7. **Terminal safety:** terminal windows receive clipboard only (no xdotool typing) to prevent shell injection
 8. **Continuous dictation invariant:** transcribing always transitions to recording (overlap->wake, no overlap->vad) unless break keyword, empty result, or mailbox interrupt
 9. **Wake mode dedup:** `flush_chunk_queue()` at recording entry prevents ring buffer + queue duplication
-
-## Known Issues
-
-1. **Dead config key:** `[session] end_phrase` exists in settings.conf but code uses hardcoded fuzzy regex `\bbr[ei][ae]k\b` in `text_processing.py`
-2. **Continuous dictation duplication (fixed):** wake mode overlap path previously captured duplicate audio from both queue and ring buffer; fix: `flush_chunk_queue()` added to `state_recording.py` wake mode entry
