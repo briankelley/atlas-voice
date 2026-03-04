@@ -48,6 +48,11 @@ def state_recording(ctx):
 
     # Wake mode: reach back to capture first word
     if ctx.recording_mode == "wake":
+        # Flush stale chunks from the queue first. The ring buffer already
+        # has the authoritative audio from wake_time onward; any chunks
+        # sitting in the queue from that same period would be duplicates.
+        ctx.audio_buffer.flush_chunk_queue()
+
         if ctx.audio_buffer.has_audio_since(ctx.wake_time):
             historical = ctx.audio_buffer.get_audio_since(ctx.wake_time)
             if len(historical) > 0:
