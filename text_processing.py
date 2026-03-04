@@ -47,13 +47,22 @@ def process_text(text, config):
 
 
 def contains_break_keyword(text, config):
-    """Check if text contains the session end phrase (fuzzy match for 'break')."""
-    # Fuzzy match for "break" catches Whisper mishearings: brick, brake, etc.
-    end_session_pattern = r'\bbr[ei][ae]k\b'
-    return bool(re.search(end_session_pattern, text, re.IGNORECASE))
+    """Check if text contains the session end phrase.
+
+    Uses the pre-built pattern from config which includes the end phrase
+    and any user-defined variants for common Whisper mishearings.
+    """
+    pattern = config.get('end_phrase_pattern')
+    if not pattern:
+        return False
+    return bool(re.search(pattern, text, re.IGNORECASE))
 
 
 def remove_break_keyword(text, config):
     """Remove the break keyword from text, return cleaned text."""
-    end_session_pattern = r'\bbr[ei][ae]k\b[,.\s]*'
-    return re.sub(end_session_pattern, '', text, flags=re.IGNORECASE).strip()
+    pattern = config.get('end_phrase_pattern')
+    if not pattern:
+        return text
+    # Add trailing punctuation/whitespace cleanup to the pattern
+    removal_pattern = pattern + r'[,.\s]*'
+    return re.sub(removal_pattern, '', text, flags=re.IGNORECASE).strip()

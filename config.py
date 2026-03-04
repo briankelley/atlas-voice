@@ -34,6 +34,10 @@ def load_config():
             'switch_to_console_phrase': 'switch to console',
             'switch_to_gui_phrase': 'switch to gui',
         },
+        'session': {
+            'end_phrase': 'break',
+            'end_phrase_variants': 'brake, brick',
+        },
     }
 
     for section, values in defaults.items():
@@ -80,6 +84,10 @@ def load_config():
 
         # Logging
         'log_transcripts': config.getboolean('behavior', 'log_transcripts') if config.has_option('behavior', 'log_transcripts') else False,
+
+        # Session
+        'end_phrase': config.get('session', 'end_phrase').strip() if config.has_option('session', 'end_phrase') else 'break',
+        'end_phrase_pattern': _build_end_phrase_pattern(config),
 
         # Beep sound
         'beep_sound': None,  # Will be set below
@@ -149,3 +157,25 @@ def _build_word_replacements(config):
         for wrong, correct in config['word_replacements'].items():
             replacements[wrong] = correct
     return replacements
+
+
+def _build_end_phrase_pattern(config):
+    """Build a regex pattern for session end phrase detection.
+
+    Combines end_phrase with end_phrase_variants into a single alternation
+    pattern with word boundaries. All matching is case-insensitive at use site.
+    """
+    phrase = config.get('session', 'end_phrase').strip() if config.has_option('session', 'end_phrase') else 'break'
+    if not phrase:
+        return None
+
+    alternatives = [re.escape(phrase)]
+
+    variants_str = config.get('session', 'end_phrase_variants').strip() if config.has_option('session', 'end_phrase_variants') else ''
+    if variants_str:
+        for v in variants_str.split(','):
+            v = v.strip()
+            if v:
+                alternatives.append(re.escape(v))
+
+    return r'\b(?:' + '|'.join(alternatives) + r')\b'
