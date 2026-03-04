@@ -5,6 +5,7 @@ __pycache__/
 *.so
 .Python
 venv/
+venv-dev/
 ENV/
 
 # Models (downloaded by installer)
